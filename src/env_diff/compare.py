@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 from env_diff.parser import EnvEntry
 
@@ -63,3 +63,26 @@ def compare_env_mappings(
         if actual_key not in example_entries:
             comparison.extra_keys.append(actual_key)
     return comparison
+
+
+def without_ignored_keys(comparison: EnvComparison, ignored_keys: Iterable[str]) -> EnvComparison:
+    """Return a copy of ``comparison`` with ``ignored_keys`` removed from every bucket.
+
+    Filtering happens after the comparison (instead of deleting keys from the
+    parsed files first) so a key is ignored the same way whether it would have
+    been missing, empty, or extra. Matching is exact and case-sensitive, like
+    the comparison itself; ignoring a key that does not appear is harmless.
+
+    Args:
+        comparison: The original result; it is not modified.
+        ignored_keys: Key names to drop.
+
+    Returns:
+        A new :class:`EnvComparison` with the same ordering minus ignored keys.
+    """
+    ignored_key_set = set(ignored_keys)
+    return EnvComparison(
+        missing_keys=[key for key in comparison.missing_keys if key not in ignored_key_set],
+        extra_keys=[key for key in comparison.extra_keys if key not in ignored_key_set],
+        empty_keys=[key for key in comparison.empty_keys if key not in ignored_key_set],
+    )

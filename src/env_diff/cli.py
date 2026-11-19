@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from env_diff import __version__
-from env_diff.compare import EnvComparison, compare_env_mappings
+from env_diff.compare import EnvComparison, compare_env_mappings, without_ignored_keys
 from env_diff.parser import EnvParseError, read_env_file
 
 # Exit codes are part of the CLI contract so scripts can tell "your .env is
@@ -45,6 +45,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--check",
         action="store_true",
         help="exit with status 1 when keys are missing or empty (for CI and git hooks)",
+    )
+    argument_parser.add_argument(
+        "--ignore",
+        action="append",
+        default=[],
+        metavar="KEY",
+        help="skip KEY in every section and in --check; repeat for several keys",
     )
     argument_parser.add_argument(
         "--format",
@@ -133,7 +140,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"env-diff: could not parse file: {error}", file=sys.stderr)
         return EXIT_USAGE_ERROR
 
-    comparison = compare_env_mappings(example_entries, actual_entries)
+    comparison = without_ignored_keys(
+        compare_env_mappings(example_entries, actual_entries), arguments.ignore
+    )
     report_formatter = format_json_report if arguments.format == "json" else format_text_report
     print(report_formatter(comparison, arguments.example_path, arguments.env_path))
     if arguments.check and comparison.has_problems:

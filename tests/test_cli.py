@@ -78,3 +78,12 @@ def test_json_format_never_includes_values(tmp_path, capsys):
 def test_json_format_keeps_check_exit_code(tmp_path):
     example_path, env_path = _write_pair(tmp_path, "A=\n", "")
     assert main([example_path, env_path, "--format", "json", "--check"]) == EXIT_PROBLEMS_FOUND
+
+
+def test_ignore_flag_lets_check_pass_for_optional_keys(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nSENTRY_DSN=\nB=\n", "A=1\nB=\n")
+    assert main([example_path, env_path, "--check"]) == EXIT_PROBLEMS_FOUND
+    capsys.readouterr()
+    exit_code = main([example_path, env_path, "--check", "--ignore", "SENTRY_DSN", "--ignore", "B"])
+    assert exit_code == EXIT_OK
+    assert "All keys match." in capsys.readouterr().out
