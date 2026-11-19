@@ -1,7 +1,7 @@
 # env-diff options
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--format {text,json}] [--version]
 ```
 
 ## Positional arguments
@@ -34,6 +34,30 @@ flag may make them fail too (see the README roadmap).
 Without `--check`, env-diff always exits `0` after a successful comparison,
 so it is safe to run as an informational step.
 
+### `--format {text,json}` (default `text`)
+
+`text` prints the human-readable report described below. `json` prints a
+single JSON object instead:
+
+```json
+{
+  "example_path": ".env.example",
+  "env_path": ".env",
+  "missing": ["DATABASE_URL"],
+  "empty": ["SECRET_KEY"],
+  "extra": ["DEBUG"],
+  "ok": false
+}
+```
+
+- Lists keep file order (missing/empty follow the template, extra follows
+  `.env`), so output is stable and diffable between runs.
+- `ok` is `true` exactly when `--check` would exit `0`.
+- Values are never included, so the JSON is safe to upload as a CI artifact.
+- The format does not change exit codes; combine it with `--check` to both
+  gate and capture details.
+- Errors (exit `2`) are still plain text on stderr, and stdout stays empty.
+
 ### `--version`
 
 Prints `env-diff <version>` and exits `0`.
@@ -50,7 +74,7 @@ Exit code `2` is distinct from `1` so CI scripts can tell "your config is
 incomplete" apart from "env-diff could not read the files at all". argparse
 also uses `2` for invalid command-line usage.
 
-## Output format
+## Text output format
 
 ```text
 Comparing <ENV_PATH> against <EXAMPLE_PATH>

@@ -57,7 +57,8 @@ into an issue or a CI log.
 - Understands the common dotenv syntax: comments, `export` prefixes, single
   and double quotes, inline `# comments`, values containing `=`.
 - Clear errors with line numbers for malformed lines.
-- Never prints values, only key names.
+- `--format json` for scripts, CI annotations, and editor integrations.
+- Never prints values, only key names (in both text and JSON output).
 - Zero runtime dependencies; Python 3.9+.
 
 ## Installation
@@ -87,7 +88,7 @@ PYTHONPATH=src python3 -m env_diff .env.example .env
 ## Usage
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--format {text,json}] [--version]
 ```
 
 Both paths are optional. With no arguments, `env-diff` compares `./.env`
@@ -143,6 +144,32 @@ env-diff .env.example .env.ci --check || {
 }
 ```
 
+### Example: JSON output for scripts
+
+```text
+$ env-diff --format json
+{
+  "example_path": ".env.example",
+  "env_path": ".env",
+  "missing": [
+    "DATABASE_URL"
+  ],
+  "empty": [
+    "SECRET_KEY"
+  ],
+  "extra": [
+    "DEBUG"
+  ],
+  "ok": false
+}
+```
+
+`ok` is `true` exactly when `--check` would pass. Pipe it into `jq`:
+
+```bash
+env-diff --format json | jq -r '.missing[]'
+```
+
 ### Example: a git pre-commit hook
 
 ```bash
@@ -158,6 +185,7 @@ exec env-diff --check
 | `EXAMPLE_PATH` | `.env.example` | Template listing the keys that should exist. Its values are ignored. |
 | `ENV_PATH` | `.env` | The real env file to check. |
 | `--check` | off | Exit with status `1` if any key is missing or empty. |
+| `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
 
 More detail: [docs/options.md](docs/options.md).
@@ -226,7 +254,8 @@ env-diff/
    not in `.env` are *missing*, template keys whose `.env` value is empty are
    *empty*, and `.env` keys not in the template are *extra*. Keys are
    case-sensitive, matching how Linux and macOS treat environment variables.
-4. **Report** with `cli.format_text_report` and choose the exit code.
+4. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
+   `--format json`) and choose the exit code.
 
 ## Testing
 
@@ -242,7 +271,6 @@ temporary files.
 
 ## Roadmap
 
-- `--format json` for machine-readable output in CI and editor integrations.
 - `--ignore KEY` to skip optional keys that are allowed to be missing.
 - Optional `--strict` mode where extra keys also fail `--check`.
 - `--fix` to append missing keys (with the template's placeholder) to `.env`.

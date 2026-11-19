@@ -59,5 +59,7 @@ on Linux and macOS). `has_problems` is true for missing or empty keys only.
 
 `format_text_report` prints a header and one section per non-empty bucket,
 using `-` for missing, `?` for empty, and `+` for extra (diff-like markers).
+`format_json_report` serializes the same three buckets plus an `ok` flag for
+`--format json`.
 `main` maps outcomes to exit codes `0`, `1` (`--check` with problems), and
 `2` (missing or malformed file).
