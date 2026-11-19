@@ -54,3 +54,27 @@ def test_defaults_to_dotenv_files_in_current_directory(tmp_path, monkeypatch, ca
     monkeypatch.chdir(tmp_path)
     assert main([]) == EXIT_OK
     assert "Comparing .env against .env.example" in capsys.readouterr().out
+
+
+def test_json_format_lists_buckets_and_ok_flag(tmp_path, capsys):
+    import json
+
+    example_path, env_path = _write_pair(tmp_path, "A=\nB=\nC=\n", "B=\nC=3\nX=1\n")
+    assert main([example_path, env_path, "--format", "json"]) == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["missing"] == ["A"]
+    assert payload["empty"] == ["B"]
+    assert payload["extra"] == ["X"]
+    assert payload["ok"] is False
+    assert payload["env_path"] == env_path
+
+
+def test_json_format_never_includes_values(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "TOKEN=\n", "TOKEN=super-secret\n")
+    main([example_path, env_path, "--format", "json"])
+    assert "super-secret" not in capsys.readouterr().out
+
+
+def test_json_format_keeps_check_exit_code(tmp_path):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "")
+    assert main([example_path, env_path, "--format", "json", "--check"]) == EXIT_PROBLEMS_FOUND

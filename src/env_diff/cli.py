@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -46,6 +47,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="exit with status 1 when keys are missing or empty (for CI and git hooks)",
     )
     argument_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="report format: human-readable text (default) or JSON for scripts",
+    )
+    argument_parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
     )
     return argument_parser
@@ -78,6 +85,32 @@ def format_text_report(comparison: EnvComparison, example_path: str, env_path: s
     return "\n".join(report_lines)
 
 
+def format_json_report(comparison: EnvComparison, example_path: str, env_path: str) -> str:
+    """Render a comparison as a JSON object for scripts and CI.
+
+    Args:
+        comparison: Result from :func:`compare_env_mappings`.
+        example_path: Template path, echoed back so multi-file jobs can tell
+            reports apart.
+        env_path: Checked path, echoed back for the same reason.
+
+    Returns:
+        A JSON string with ``example_path``, ``env_path``, ``missing``,
+        ``empty``, ``extra`` (key names only, never values) and ``ok``, which
+        is true exactly when ``--check`` would pass. Lists keep file order so
+        output is stable across runs and easy to diff.
+    """
+    report_payload = {
+        "example_path": example_path,
+        "env_path": env_path,
+        "missing": comparison.missing_keys,
+        "empty": comparison.empty_keys,
+        "extra": comparison.extra_keys,
+        "ok": not comparison.has_problems,
+    }
+    return json.dumps(report_payload, indent=2)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run env-diff and return a process exit code.
 
@@ -101,7 +134,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_USAGE_ERROR
 
     comparison = compare_env_mappings(example_entries, actual_entries)
-    print(format_text_report(comparison, arguments.example_path, arguments.env_path))
+    report_formatter = format_json_report if arguments.format == "json" else format_text_report
+    print(report_formatter(comparison, arguments.example_path, arguments.env_path))
     if arguments.check and comparison.has_problems:
         return EXIT_PROBLEMS_FOUND
     return EXIT_OK
