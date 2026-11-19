@@ -1,0 +1,17 @@
+# Python bytecode and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Local virtual environments and tool caches
+.venv/
+venv/
+.pytest_cache/
+
+# Real environment files hold secrets; only the example belongs in git.
+# The test fixtures live under tests/ and use non-secret placeholder values.
+.env
+.env.*
+!.env.example
