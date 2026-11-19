@@ -45,3 +45,14 @@ def test_comparison_is_case_sensitive():
     comparison = compare_env_mappings(_mapping("API_KEY="), _mapping("api_key=1"))
     assert comparison.missing_keys == ["API_KEY"]
     assert comparison.extra_keys == ["api_key"]
+
+
+def test_without_ignored_keys_drops_from_every_bucket():
+    from env_diff.compare import without_ignored_keys
+
+    original = compare_env_mappings(_mapping("A=\nB=\nC="), _mapping("B=\nC=1\nX=1"))
+    filtered = without_ignored_keys(original, ["A", "B", "X", "NOT_PRESENT"])
+    assert (filtered.missing_keys, filtered.empty_keys, filtered.extra_keys) == ([], [], [])
+    assert not filtered.has_problems
+    # The input comparison must be left untouched.
+    assert original.missing_keys == ["A"]
