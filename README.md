@@ -57,6 +57,7 @@ into an issue or a CI log.
 - Understands the common dotenv syntax: comments, `export` prefixes, single
   and double quotes, inline `# comments`, values containing `=`.
 - Clear errors with line numbers for malformed lines.
+- `--ignore KEY` (repeatable) for optional keys that may be missing or empty.
 - `--format json` for scripts, CI annotations, and editor integrations.
 - Never prints values, only key names (in both text and JSON output).
 - Zero runtime dependencies; Python 3.9+.
@@ -88,7 +89,7 @@ PYTHONPATH=src python3 -m env_diff .env.example .env
 ## Usage
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--format {text,json}] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--ignore KEY ...] [--format {text,json}] [--version]
 ```
 
 Both paths are optional. With no arguments, `env-diff` compares `./.env`
@@ -144,6 +145,17 @@ env-diff .env.example .env.ci --check || {
 }
 ```
 
+### Example: allowing optional keys
+
+`SENTRY_DSN` is optional on laptops, so skip it (repeat `--ignore` for more):
+
+```text
+$ env-diff --check --ignore SENTRY_DSN --ignore DEBUG
+```
+
+Ignored keys disappear from every section (missing, empty, and extra) and
+never affect the exit code.
+
 ### Example: JSON output for scripts
 
 ```text
@@ -185,6 +197,7 @@ exec env-diff --check
 | `EXAMPLE_PATH` | `.env.example` | Template listing the keys that should exist. Its values are ignored. |
 | `ENV_PATH` | `.env` | The real env file to check. |
 | `--check` | off | Exit with status `1` if any key is missing or empty. |
+| `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
 
@@ -254,7 +267,8 @@ env-diff/
    not in `.env` are *missing*, template keys whose `.env` value is empty are
    *empty*, and `.env` keys not in the template are *extra*. Keys are
    case-sensitive, matching how Linux and macOS treat environment variables.
-4. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
+4. **Filter** out any `--ignore` keys with `compare.without_ignored_keys`.
+5. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
    `--format json`) and choose the exit code.
 
 ## Testing
@@ -271,7 +285,7 @@ temporary files.
 
 ## Roadmap
 
-- `--ignore KEY` to skip optional keys that are allowed to be missing.
+- Read ignored keys from a `.env-diff-ignore` file or `# env-diff: optional` comments in the template.
 - Optional `--strict` mode where extra keys also fail `--check`.
 - `--fix` to append missing keys (with the template's placeholder) to `.env`.
 - Multi-line quoted values.

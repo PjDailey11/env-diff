@@ -55,6 +55,11 @@ key keeps its original position in the dict, so reports stay in file order.
 Comparison is case-sensitive (`API_KEY` and `api_key` are different variables
 on Linux and macOS). `has_problems` is true for missing or empty keys only.
 
+`without_ignored_keys(comparison, keys)` returns a filtered copy for
+`--ignore`. It runs after the comparison rather than editing the parsed files,
+so an ignored key is removed consistently from all three buckets and the
+original result is never mutated.
+
 ## Reporting (`env_diff/cli.py`)
 
 `format_text_report` prints a header and one section per non-empty bucket,

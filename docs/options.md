@@ -1,7 +1,7 @@
 # env-diff options
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--format {text,json}] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--ignore KEY ...] [--format {text,json}] [--version]
 ```
 
 ## Positional arguments
@@ -33,6 +33,22 @@ flag may make them fail too (see the README roadmap).
 
 Without `--check`, env-diff always exits `0` after a successful comparison,
 so it is safe to run as an informational step.
+
+### `--ignore KEY` (repeatable)
+
+Drops `KEY` from the missing, empty, and extra sections before the report is
+printed and before `--check` decides the exit code. Use it for optional
+settings such as `SENTRY_DSN` or local-only overrides:
+
+```bash
+env-diff --check --ignore SENTRY_DSN --ignore DEBUG
+```
+
+- Matching is exact and case-sensitive, like the comparison itself.
+- Ignoring a key that does not appear in either file is not an error, so one
+  shared command line works across `.env`, `.env.ci`, and `.env.production`.
+- Filtering is applied after comparison, so it behaves the same whichever
+  bucket the key would have landed in. JSON output is filtered too.
 
 ### `--format {text,json}` (default `text`)
 
