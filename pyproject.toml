@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "env-diff"
+version = "0.1.0"
+description = "Compare a .env.example against a .env and report missing, extra, and empty keys."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "PJ Dailey", email = "pjdailey13@gmail.com" }]
+keywords = ["dotenv", "env", "config", "cli", "diff"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Environment :: Console",
+    "Topic :: Software Development :: Build Tools",
+]
+
+[project.scripts]
+env-diff = "env_diff.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
