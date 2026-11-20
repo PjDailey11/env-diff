@@ -54,6 +54,9 @@ key keeps its original position in the dict, so reports stay in file order.
 
 Comparison is case-sensitive (`API_KEY` and `api_key` are different variables
 on Linux and macOS). `has_problems` is true for missing or empty keys only.
+`fails_check(strict=False)` is what the CLI uses for the exit code and the
+JSON `ok` flag: it returns `has_problems`, or, in strict mode, also true when
+any extra key remains after `--ignore` filtering.
 
 `without_ignored_keys(comparison, keys)` returns a filtered copy for
 `--ignore`. It runs after the comparison rather than editing the parsed files,
