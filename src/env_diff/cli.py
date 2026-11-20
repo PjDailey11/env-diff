@@ -6,12 +6,17 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from env_diff import __version__
 from env_diff.compare import EnvComparison, compare_env_mappings, without_ignored_keys
 from env_diff.ignore_file import DEFAULT_IGNORE_FILENAME, read_ignore_file
-from env_diff.parser import EnvParseError, read_env_file
+from env_diff.parser import (
+    EnvParseError,
+    entries_to_mapping,
+    find_duplicate_keys,
+    read_env_entries,
+)
 
 # Exit codes are part of the CLI contract so scripts can tell "your .env is
 # incomplete" (1) apart from "env-diff could not even read the files" (2).
@@ -163,6 +168,26 @@ def collect_ignored_keys(flag_keys: List[str], ignore_file_path: Optional[str]) 
     return list(flag_keys)
 
 
+def format_duplicate_warnings(env_path: str, duplicate_lines_by_key: Dict[str, List[int]]) -> List[str]:
+    """Build one warning line per key that is assigned more than once.
+
+    Args:
+        env_path: File the duplicates were found in, shown so the user knows
+            which of the two files to edit.
+        duplicate_lines_by_key: Output of :func:`find_duplicate_keys`.
+
+    Returns:
+        Lines such as ``env-diff: warning: .env: KEY is set 2 times (lines 3,
+        9); the last value wins``. Values are never included.
+    """
+    return [
+        f"env-diff: warning: {env_path}: {key} is set {len(line_numbers)} times "
+        f"(lines {', '.join(str(line_number) for line_number in line_numbers)}); "
+        "the last value wins"
+        for key, line_numbers in duplicate_lines_by_key.items()
+    ]
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run env-diff and return a process exit code.
 
@@ -176,8 +201,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     """
     arguments = build_argument_parser().parse_args(argv)
     try:
-        example_entries = read_env_file(Path(arguments.example_path))
-        actual_entries = read_env_file(Path(arguments.env_path))
+        example_entry_list = read_env_entries(Path(arguments.example_path))
+        actual_entry_list = read_env_entries(Path(arguments.env_path))
         ignored_keys = collect_ignored_keys(arguments.ignore, arguments.ignore_file)
     except FileNotFoundError as error:
         print(f"env-diff: file not found: {error.filename}", file=sys.stderr)
@@ -186,6 +211,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"env-diff: could not parse file: {error}", file=sys.stderr)
         return EXIT_USAGE_ERROR
 
+    # Warnings go to stderr so text reports and JSON on stdout stay
+    # machine-readable, and they never change the exit code: duplicates are
+    # suspicious but the file still loads the same way a shell would read it.
+    for checked_path, entry_list in (
+        (arguments.example_path, example_entry_list),
+        (arguments.env_path, actual_entry_list),
+    ):
+        for warning_line in format_duplicate_warnings(checked_path, find_duplicate_keys(entry_list)):
+            print(warning_line, file=sys.stderr)
+
+    example_entries = entries_to_mapping(example_entry_list)
+    actual_entries = entries_to_mapping(actual_entry_list)
     comparison = without_ignored_keys(
         compare_env_mappings(example_entries, actual_entries), ignored_keys
     )

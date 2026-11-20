@@ -59,6 +59,8 @@ into an issue or a CI log.
 - Understands the common dotenv syntax: comments, `export` prefixes, single
   and double quotes, inline `# comments`, values containing `=`.
 - Clear errors with line numbers for malformed lines.
+- Warns on stderr when a key is assigned more than once in either file (the
+  last value silently wins, which can hide a real secret behind `KEY=`).
 - `--ignore KEY` (repeatable) for optional keys that may be missing or empty.
 - `--ignore-file PATH` (or an automatic `./.env-diff-ignore`) to commit the
   list of optional keys once and share it between hooks, CI, and teammates.
@@ -221,6 +223,22 @@ $ env-diff --format json
 env-diff --format json | jq -r '.missing[]'
 ```
 
+### Example: duplicate key warning
+
+If `.env` sets `SECRET_KEY` on line 2 and again (empty) on line 7, the report
+shows it as empty and stderr explains why:
+
+```text
+$ env-diff
+env-diff: warning: .env: SECRET_KEY is set 2 times (lines 2, 7); the last value wins
+Comparing .env against .env.example
+Empty (1):
+  ? SECRET_KEY
+```
+
+Warnings never change the exit code and never go to stdout, so JSON output
+stays parseable.
+
 ### Example: a git pre-commit hook
 
 ```bash
@@ -268,7 +286,7 @@ More detail: [docs/options.md](docs/options.md).
 | `server.port=80` | `server.port` | `80` (dots and dashes allowed in keys) |
 
 If a key appears twice, the last value wins (the same as a shell reading the
-file top to bottom). Not supported on purpose: multi-line values, `${VAR}`
+file top to bottom), and env-diff prints a warning naming every line. Not supported on purpose: multi-line values, `${VAR}`
 expansion, and command substitution. env-diff only needs key names and
 emptiness, and it should never execute anything from your env file.
 
@@ -304,8 +322,10 @@ env-diff/
    by line, skips comments and blanks, strips `export`, splits on the first
    `=`, validates the key, and unquotes the value. Each assignment becomes an
    `EnvEntry(key, value, line_number)`.
-2. **Collapse** entries into a `key -> entry` dict (`entries_to_mapping`);
-   later duplicates overwrite earlier ones but keep the first key's position.
+2. **Warn** about keys assigned more than once (`parser.find_duplicate_keys`,
+   printed to stderr by `cli.format_duplicate_warnings`), then **collapse**
+   entries into a `key -> entry` dict (`entries_to_mapping`); later duplicates
+   overwrite earlier ones but keep the first key's position.
 3. **Compare** the two mappings (`compare.compare_env_mappings`): template keys
    not in `.env` are *missing*, template keys whose `.env` value is empty are
    *empty*, and `.env` keys not in the template are *extra*. Keys are

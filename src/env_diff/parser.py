@@ -118,6 +118,52 @@ def entries_to_mapping(entries: List[EnvEntry]) -> Dict[str, EnvEntry]:
     return mapping
 
 
+def find_duplicate_keys(entries: List[EnvEntry]) -> Dict[str, List[int]]:
+    """Find keys that are assigned more than once.
+
+    A repeated key is almost always a mistake: a merge conflict resolved by
+    keeping both sides, or a pasted block that re-declares ``SECRET_KEY=``
+    below the real value. Because the last assignment silently wins, the
+    empty copy can hide the real one, so callers surface these as warnings.
+
+    Args:
+        entries: Entries from :func:`parse_env_text`, in file order.
+
+    Returns:
+        Mapping of each duplicated key to every line number where it is
+        assigned, ordered by the key's first appearance. Keys assigned only
+        once are omitted, so an empty dict means the file is clean.
+    """
+    line_numbers_by_key: Dict[str, List[int]] = {}
+    for entry in entries:
+        line_numbers_by_key.setdefault(entry.key, []).append(entry.line_number)
+    return {
+        key: line_numbers
+        for key, line_numbers in line_numbers_by_key.items()
+        if len(line_numbers) > 1
+    }
+
+
+def read_env_entries(env_path: Path) -> List[EnvEntry]:
+    """Read and parse a dotenv file from disk, keeping every assignment.
+
+    Args:
+        env_path: Path to the file.
+
+    Returns:
+        All entries in file order, including duplicates, so callers can both
+        build a mapping and look for repeated keys from a single read.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        EnvParseError: If the file contains a malformed line.
+    """
+    # utf-8-sig drops a BOM that Windows editors sometimes add, which would
+    # otherwise glue itself onto the first key name.
+    env_text = Path(env_path).read_text(encoding="utf-8-sig")
+    return parse_env_text(env_text)
+
+
 def read_env_file(env_path: Path) -> Dict[str, EnvEntry]:
     """Read and parse a dotenv file from disk.
 
@@ -131,7 +177,4 @@ def read_env_file(env_path: Path) -> Dict[str, EnvEntry]:
         FileNotFoundError: If the file does not exist.
         EnvParseError: If the file contains a malformed line.
     """
-    # utf-8-sig drops a BOM that Windows editors sometimes add, which would
-    # otherwise glue itself onto the first key name.
-    env_text = Path(env_path).read_text(encoding="utf-8-sig")
-    return entries_to_mapping(parse_env_text(env_text))
+    return entries_to_mapping(read_env_entries(env_path))
