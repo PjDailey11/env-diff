@@ -36,6 +36,22 @@ class EnvComparison:
         """
         return bool(self.missing_keys or self.empty_keys)
 
+    def fails_check(self, strict: bool = False) -> bool:
+        """Decide whether ``--check`` should fail for this comparison.
+
+        Args:
+            strict: When true, extra keys count as failures too. This suits
+                production or CI env files, where an undocumented key usually
+                means the template is stale, while the default keeps laptop
+                overrides such as ``DEBUG=1`` from breaking the check.
+
+        Returns:
+            True when the check should exit non-zero.
+        """
+        if self.has_problems:
+            return True
+        return strict and bool(self.extra_keys)
+
 
 def compare_env_mappings(
     example_entries: Dict[str, EnvEntry],
