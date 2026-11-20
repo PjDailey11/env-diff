@@ -60,6 +60,8 @@ into an issue or a CI log.
   and double quotes, inline `# comments`, values containing `=`.
 - Clear errors with line numbers for malformed lines.
 - `--ignore KEY` (repeatable) for optional keys that may be missing or empty.
+- `--ignore-file PATH` (or an automatic `./.env-diff-ignore`) to commit the
+  list of optional keys once and share it between hooks, CI, and teammates.
 - `--format json` for scripts, CI annotations, and editor integrations.
 - Never prints values, only key names (in both text and JSON output).
 - Zero runtime dependencies; Python 3.9+.
@@ -91,7 +93,7 @@ PYTHONPATH=src python3 -m env_diff .env.example .env
 ## Usage
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--strict] [--ignore KEY ...] [--format {text,json}] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--strict] [--ignore KEY ...] [--ignore-file PATH] [--format {text,json}] [--version]
 ```
 
 Both paths are optional. With no arguments, `env-diff` compares `./.env`
@@ -172,6 +174,27 @@ $ env-diff --check --ignore SENTRY_DSN --ignore DEBUG
 Ignored keys disappear from every section (missing, empty, and extra) and
 never affect the exit code.
 
+### Example: sharing optional keys in `.env-diff-ignore`
+
+Commit a `.env-diff-ignore` next to `.env.example` (one key per line, `#`
+comments allowed) and every run from that directory picks it up:
+
+```text
+$ cat .env-diff-ignore
+# Only configured in production
+SENTRY_DSN
+DEBUG   # local override
+$ env-diff --check
+Comparing .env against .env.example
+Missing (1):
+  - DATABASE_URL
+Empty (1):
+  ? SECRET_KEY
+```
+
+Use `--ignore-file path/to/file` to read a different file; keys from the file
+and from `--ignore` flags are combined.
+
 ### Example: JSON output for scripts
 
 ```text
@@ -215,6 +238,7 @@ exec env-diff --check
 | `--check` | off | Exit with status `1` if any key is missing or empty. |
 | `--strict` | off | With `--check`, extra keys also fail. Also makes JSON `ok` false when extra keys exist. |
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
+| `--ignore-file PATH` | `./.env-diff-ignore` if present | Read keys to ignore from a file, one per line, `#` comments allowed. Combined with `--ignore`. A missing explicit file exits `2`. |
 | `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
 
@@ -226,7 +250,7 @@ More detail: [docs/options.md](docs/options.md).
 | --- | --- |
 | `0` | Comparison ran. With `--check`, no keys are missing or empty. |
 | `1` | `--check` was given and at least one key is missing or empty (or extra, with `--strict`). |
-| `2` | A file was not found or contains a malformed line. |
+| `2` | A file (including an explicit `--ignore-file`) was not found, or an env file contains a malformed line. |
 
 ## Supported .env syntax
 
@@ -265,10 +289,12 @@ env-diff/
 │   ├── __main__.py         # python -m env_diff
 │   ├── cli.py              # argument parsing, report formatting, exit codes
 │   ├── compare.py          # EnvComparison and compare_env_mappings
+│   ├── ignore_file.py      # .env-diff-ignore / --ignore-file loading
 │   └── parser.py           # dotenv parsing (EnvEntry, EnvParseError)
 └── tests/
     ├── test_cli.py
     ├── test_compare.py
+    ├── test_ignore_file.py
     └── test_parser.py
 ```
 
@@ -284,7 +310,9 @@ env-diff/
    not in `.env` are *missing*, template keys whose `.env` value is empty are
    *empty*, and `.env` keys not in the template are *extra*. Keys are
    case-sensitive, matching how Linux and macOS treat environment variables.
-4. **Filter** out any `--ignore` keys with `compare.without_ignored_keys`.
+4. **Filter** out ignored keys with `compare.without_ignored_keys`. The list
+   is `--ignore` flags plus `--ignore-file` (or `./.env-diff-ignore`), merged
+   by `cli.collect_ignored_keys` using `ignore_file.read_ignore_file`.
 5. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
    `--format json`) and choose the exit code with
    `EnvComparison.fails_check(strict=...)`.
@@ -303,7 +331,7 @@ temporary files.
 
 ## Roadmap
 
-- Read ignored keys from a `.env-diff-ignore` file or `# env-diff: optional` comments in the template.
+- Mark optional keys inline with `# env-diff: optional` comments in the template.
 - `--fix` to append missing keys (with the template's placeholder) to `.env`.
 - Multi-line quoted values.
 
