@@ -87,3 +87,30 @@ def test_ignore_flag_lets_check_pass_for_optional_keys(tmp_path, capsys):
     exit_code = main([example_path, env_path, "--check", "--ignore", "SENTRY_DSN", "--ignore", "B"])
     assert exit_code == EXIT_OK
     assert "All keys match." in capsys.readouterr().out
+
+
+def test_strict_check_fails_on_extra_keys(tmp_path):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nSTALE=1\n")
+    assert main([example_path, env_path, "--check"]) == EXIT_OK
+    assert main([example_path, env_path, "--check", "--strict"]) == EXIT_PROBLEMS_FOUND
+
+
+def test_strict_without_check_still_exits_zero(tmp_path):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nSTALE=1\n")
+    assert main([example_path, env_path, "--strict"]) == EXIT_OK
+
+
+def test_strict_json_ok_flag_matches_exit_code(tmp_path, capsys):
+    import json
+
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nSTALE=1\n")
+    main([example_path, env_path, "--format", "json"])
+    assert json.loads(capsys.readouterr().out)["ok"] is True
+    main([example_path, env_path, "--format", "json", "--strict"])
+    assert json.loads(capsys.readouterr().out)["ok"] is False
+
+
+def test_strict_respects_ignored_extra_keys(tmp_path):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nDEBUG=1\n")
+    exit_code = main([example_path, env_path, "--check", "--strict", "--ignore", "DEBUG"])
+    assert exit_code == EXIT_OK
