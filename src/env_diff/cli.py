@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from env_diff import __version__
 from env_diff.compare import EnvComparison, compare_env_mappings, without_ignored_keys
+from env_diff.ignore_file import DEFAULT_IGNORE_FILENAME, read_ignore_file
 from env_diff.parser import EnvParseError, read_env_file
 
 # Exit codes are part of the CLI contract so scripts can tell "your .env is
@@ -57,6 +58,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="KEY",
         help="skip KEY in every section and in --check; repeat for several keys",
+    )
+    argument_parser.add_argument(
+        "--ignore-file",
+        metavar="PATH",
+        default=None,
+        help=(
+            "read keys to ignore from PATH, one per line "
+            f"(default: ./{DEFAULT_IGNORE_FILENAME} if it exists)"
+        ),
     )
     argument_parser.add_argument(
         "--format",
@@ -128,6 +138,31 @@ def format_json_report(
     return json.dumps(report_payload, indent=2)
 
 
+def collect_ignored_keys(flag_keys: List[str], ignore_file_path: Optional[str]) -> List[str]:
+    """Combine ``--ignore`` flags with keys from an ignore file.
+
+    Args:
+        flag_keys: Keys given with repeated ``--ignore`` flags.
+        ignore_file_path: Value of ``--ignore-file``, or ``None`` to fall back
+            to ``./.env-diff-ignore`` when that file exists.
+
+    Returns:
+        Flag keys followed by file keys. Duplicates are harmless because the
+        result is only used for membership checks.
+
+    Raises:
+        FileNotFoundError: If an explicitly requested ignore file is missing.
+            A missing default file is not an error, since most repos will not
+            have one.
+    """
+    if ignore_file_path is not None:
+        return list(flag_keys) + read_ignore_file(Path(ignore_file_path))
+    default_ignore_path = Path(DEFAULT_IGNORE_FILENAME)
+    if default_ignore_path.is_file():
+        return list(flag_keys) + read_ignore_file(default_ignore_path)
+    return list(flag_keys)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run env-diff and return a process exit code.
 
@@ -143,6 +178,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         example_entries = read_env_file(Path(arguments.example_path))
         actual_entries = read_env_file(Path(arguments.env_path))
+        ignored_keys = collect_ignored_keys(arguments.ignore, arguments.ignore_file)
     except FileNotFoundError as error:
         print(f"env-diff: file not found: {error.filename}", file=sys.stderr)
         return EXIT_USAGE_ERROR
@@ -151,7 +187,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_USAGE_ERROR
 
     comparison = without_ignored_keys(
-        compare_env_mappings(example_entries, actual_entries), arguments.ignore
+        compare_env_mappings(example_entries, actual_entries), ignored_keys
     )
     if arguments.format == "json":
         print(

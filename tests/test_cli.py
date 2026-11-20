@@ -114,3 +114,32 @@ def test_strict_respects_ignored_extra_keys(tmp_path):
     example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nDEBUG=1\n")
     exit_code = main([example_path, env_path, "--check", "--strict", "--ignore", "DEBUG"])
     assert exit_code == EXIT_OK
+
+
+def test_ignore_file_flag_skips_listed_keys(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nSENTRY_DSN=\nB=\n", "A=1\n")
+    ignore_path = tmp_path / "optional-keys.txt"
+    ignore_path.write_text("# optional\nSENTRY_DSN\n")
+    # B is still missing, so check fails until it is ignored with a flag too.
+    assert main([example_path, env_path, "--check", "--ignore-file", str(ignore_path)]) == EXIT_PROBLEMS_FOUND
+    capsys.readouterr()
+    exit_code = main(
+        [example_path, env_path, "--check", "--ignore-file", str(ignore_path), "--ignore", "B"]
+    )
+    assert exit_code == EXIT_OK
+    assert "All keys match." in capsys.readouterr().out
+
+
+def test_default_ignore_file_is_used_when_present(tmp_path, monkeypatch):
+    _write_pair(tmp_path, "A=\nSENTRY_DSN=\n", "A=1\n")
+    monkeypatch.chdir(tmp_path)
+    assert main(["--check"]) == EXIT_PROBLEMS_FOUND
+    (tmp_path / ".env-diff-ignore").write_text("SENTRY_DSN\n")
+    assert main(["--check"]) == EXIT_OK
+
+
+def test_missing_explicit_ignore_file_is_usage_error(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\n")
+    missing_path = str(tmp_path / "nope-ignore")
+    assert main([example_path, env_path, "--ignore-file", missing_path]) == EXIT_USAGE_ERROR
+    assert "file not found" in capsys.readouterr().err
