@@ -128,6 +128,19 @@ Exit code `2` is distinct from `1` so CI scripts can tell "your config is
 incomplete" apart from "env-diff could not read the files at all". argparse
 also uses `2` for invalid command-line usage.
 
+## Warnings
+
+Keys assigned more than once in either file produce one line per key on
+stderr, for example:
+
+```text
+env-diff: warning: .env: SECRET_KEY is set 2 times (lines 2, 7); the last value wins
+```
+
+Warnings are informational: they do not affect the exit code (with or without
+`--check` / `--strict`) and never appear on stdout, so `--format json` output
+stays valid.
+
 ## Text output format
 
 ```text

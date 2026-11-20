@@ -143,3 +143,23 @@ def test_missing_explicit_ignore_file_is_usage_error(tmp_path, capsys):
     missing_path = str(tmp_path / "nope-ignore")
     assert main([example_path, env_path, "--ignore-file", missing_path]) == EXIT_USAGE_ERROR
     assert "file not found" in capsys.readouterr().err
+
+
+def test_duplicate_keys_warn_on_stderr_without_changing_exit_code(tmp_path, capsys):
+    example_path, env_path = _write_pair(
+        tmp_path, "SECRET_KEY=\n", "SECRET_KEY=real-value\nPORT=1\nSECRET_KEY=\n"
+    )
+    assert main([example_path, env_path, "--format", "json"]) == EXIT_OK
+    captured = capsys.readouterr()
+    assert f"{env_path}: SECRET_KEY is set 2 times (lines 1, 3)" in captured.err
+    # stdout must stay valid JSON and must never leak the shadowed value.
+    assert "real-value" not in captured.err + captured.out
+    import json
+
+    assert json.loads(captured.out)["empty"] == ["SECRET_KEY"]
+
+
+def test_clean_files_print_no_warnings(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\n")
+    main([example_path, env_path])
+    assert capsys.readouterr().err == ""

@@ -63,6 +63,17 @@ any extra key remains after `--ignore` filtering.
 so an ignored key is removed consistently from all three buckets and the
 original result is never mutated.
 
+## Duplicate keys
+
+`find_duplicate_keys(entries)` maps every key assigned more than once to all
+of its line numbers (an `export KEY=` and a plain `KEY=` count as the same
+key). The CLI reads each file once with `read_env_entries`, prints one
+`env-diff: warning: ...` line per duplicate to **stderr**, and only then
+collapses the entries with `entries_to_mapping`. Warnings never include values
+and never change the exit code, because the file still loads exactly as a
+shell would read it; they exist to catch merge leftovers such as an empty
+`SECRET_KEY=` shadowing the real value.
+
 ## Ignore files (`env_diff/ignore_file.py`)
 
 `parse_ignore_text` reads one key per line and strips everything after `#`
