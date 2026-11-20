@@ -2,7 +2,14 @@
 
 import pytest
 
-from env_diff.parser import EnvParseError, entries_to_mapping, parse_env_text, read_env_file
+from env_diff.parser import (
+    EnvParseError,
+    entries_to_mapping,
+    find_duplicate_keys,
+    parse_env_text,
+    read_env_entries,
+    read_env_file,
+)
 
 
 def test_parses_simple_assignments_in_file_order():
@@ -75,3 +82,23 @@ def test_read_env_file_drops_utf8_bom(tmp_path):
 def test_read_env_file_missing_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         read_env_file(tmp_path / "nope.env")
+
+
+def test_find_duplicate_keys_reports_every_line():
+    entries = parse_env_text("A=1\nB=2\nA=3\n# note\nB=\nA=5\nC=1\n")
+    assert find_duplicate_keys(entries) == {"A": [1, 3, 6], "B": [2, 5]}
+
+
+def test_find_duplicate_keys_empty_for_clean_file():
+    assert find_duplicate_keys(parse_env_text("A=1\nB=2\n")) == {}
+
+
+def test_export_prefix_does_not_hide_a_duplicate():
+    entries = parse_env_text("export TOKEN=abc\nTOKEN=\n")
+    assert find_duplicate_keys(entries) == {"TOKEN": [1, 2]}
+
+
+def test_read_env_entries_keeps_duplicates(tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("KEY=first\nKEY=second\n")
+    assert [entry.value for entry in read_env_entries(env_path)] == ["first", "second"]
