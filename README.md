@@ -54,6 +54,8 @@ into an issue or a CI log.
 - `--check` mode exits with status `1` when keys are missing or empty, for CI
   and pre-commit hooks. Extra keys never fail the check, because local
   overrides like `DEBUG=1` are normal.
+- `--strict` makes extra keys fail `--check` too, for production and CI files
+  where an undocumented key means the template is stale.
 - Understands the common dotenv syntax: comments, `export` prefixes, single
   and double quotes, inline `# comments`, values containing `=`.
 - Clear errors with line numbers for malformed lines.
@@ -89,7 +91,7 @@ PYTHONPATH=src python3 -m env_diff .env.example .env
 ## Usage
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--ignore KEY ...] [--format {text,json}] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--strict] [--ignore KEY ...] [--format {text,json}] [--version]
 ```
 
 Both paths are optional. With no arguments, `env-diff` compares `./.env`
@@ -145,6 +147,20 @@ env-diff .env.example .env.ci --check || {
 }
 ```
 
+### Example: strict check for production files
+
+Extra keys pass `--check` by default. Add `--strict` when the template must
+list every key, for example a production env file reviewed in CI:
+
+```text
+$ env-diff .env.example .env.production --check --strict
+Comparing .env.production against .env.example
+Extra (1):
+  + LEGACY_API_URL
+$ echo $?
+1
+```
+
 ### Example: allowing optional keys
 
 `SENTRY_DSN` is optional on laptops, so skip it (repeat `--ignore` for more):
@@ -197,6 +213,7 @@ exec env-diff --check
 | `EXAMPLE_PATH` | `.env.example` | Template listing the keys that should exist. Its values are ignored. |
 | `ENV_PATH` | `.env` | The real env file to check. |
 | `--check` | off | Exit with status `1` if any key is missing or empty. |
+| `--strict` | off | With `--check`, extra keys also fail. Also makes JSON `ok` false when extra keys exist. |
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
@@ -208,7 +225,7 @@ More detail: [docs/options.md](docs/options.md).
 | Code | Meaning |
 | --- | --- |
 | `0` | Comparison ran. With `--check`, no keys are missing or empty. |
-| `1` | `--check` was given and at least one key is missing or empty. |
+| `1` | `--check` was given and at least one key is missing or empty (or extra, with `--strict`). |
 | `2` | A file was not found or contains a malformed line. |
 
 ## Supported .env syntax
@@ -269,7 +286,8 @@ env-diff/
    case-sensitive, matching how Linux and macOS treat environment variables.
 4. **Filter** out any `--ignore` keys with `compare.without_ignored_keys`.
 5. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
-   `--format json`) and choose the exit code.
+   `--format json`) and choose the exit code with
+   `EnvComparison.fails_check(strict=...)`.
 
 ## Testing
 
@@ -286,7 +304,6 @@ temporary files.
 ## Roadmap
 
 - Read ignored keys from a `.env-diff-ignore` file or `# env-diff: optional` comments in the template.
-- Optional `--strict` mode where extra keys also fail `--check`.
 - `--fix` to append missing keys (with the template's placeholder) to `.env`.
 - Multi-line quoted values.
 

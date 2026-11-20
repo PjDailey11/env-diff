@@ -1,7 +1,7 @@
 # env-diff options
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--ignore KEY ...] [--format {text,json}] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--strict] [--ignore KEY ...] [--format {text,json}] [--version]
 ```
 
 ## Positional arguments
@@ -28,11 +28,27 @@ Turns env-diff into a gate. The report is still printed, and then:
 - exit `0` otherwise, **even if there are extra keys**.
 
 Extra keys are deliberately not a failure: local-only overrides (`DEBUG=1`,
-`LOG_LEVEL=debug`) are normal and should not break CI. A future `--strict`
-flag may make them fail too (see the README roadmap).
+`LOG_LEVEL=debug`) are normal and should not break CI. Use `--strict` (below)
+when they should fail too.
 
 Without `--check`, env-diff always exits `0` after a successful comparison,
 so it is safe to run as an informational step.
+
+### `--strict`
+
+Makes `--check` treat **extra** keys as failures in addition to missing and
+empty ones. Intended for production or CI env files, where a key the template
+does not list usually means the template is out of date:
+
+```bash
+env-diff .env.example .env.production --check --strict
+```
+
+- Without `--check`, `--strict` never changes the exit code (it stays `0`), so
+  informational runs cannot fail unexpectedly.
+- With `--format json`, `ok` follows the same rule, so `ok` is `false` when
+  extra keys exist in strict mode.
+- `--ignore` is applied first, so an ignored extra key never fails strict mode.
 
 ### `--ignore KEY` (repeatable)
 
@@ -68,7 +84,7 @@ single JSON object instead:
 
 - Lists keep file order (missing/empty follow the template, extra follows
   `.env`), so output is stable and diffable between runs.
-- `ok` is `true` exactly when `--check` would exit `0`.
+- `ok` is `true` exactly when `--check` would exit `0` (honoring `--strict`).
 - Values are never included, so the JSON is safe to upload as a CI artifact.
 - The format does not change exit codes; combine it with `--check` to both
   gate and capture details.
@@ -83,7 +99,7 @@ Prints `env-diff <version>` and exits `0`.
 | Code | When |
 | --- | --- |
 | `0` | Comparison ran (and, with `--check`, nothing is missing or empty). |
-| `1` | `--check` and at least one key is missing or empty. |
+| `1` | `--check` and at least one key is missing or empty (or extra, with `--strict`). |
 | `2` | A file does not exist, or a line could not be parsed. The error on stderr names the line number. |
 
 Exit code `2` is distinct from `1` so CI scripts can tell "your config is

@@ -47,6 +47,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="exit with status 1 when keys are missing or empty (for CI and git hooks)",
     )
     argument_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="with --check, also fail when .env has keys the template does not list",
+    )
+    argument_parser.add_argument(
         "--ignore",
         action="append",
         default=[],
@@ -92,7 +97,9 @@ def format_text_report(comparison: EnvComparison, example_path: str, env_path: s
     return "\n".join(report_lines)
 
 
-def format_json_report(comparison: EnvComparison, example_path: str, env_path: str) -> str:
+def format_json_report(
+    comparison: EnvComparison, example_path: str, env_path: str, strict: bool = False
+) -> str:
     """Render a comparison as a JSON object for scripts and CI.
 
     Args:
@@ -100,11 +107,14 @@ def format_json_report(comparison: EnvComparison, example_path: str, env_path: s
         example_path: Template path, echoed back so multi-file jobs can tell
             reports apart.
         env_path: Checked path, echoed back for the same reason.
+        strict: Whether ``--strict`` was given. ``ok`` must agree with the
+            exit code ``--check`` would produce, so extra keys make it false
+            in strict mode.
 
     Returns:
         A JSON string with ``example_path``, ``env_path``, ``missing``,
         ``empty``, ``extra`` (key names only, never values) and ``ok``, which
-        is true exactly when ``--check`` would pass. Lists keep file order so
+        is true exactly when ``--check`` (with the same ``--strict``) would pass. Lists keep file order so
         output is stable across runs and easy to diff.
     """
     report_payload = {
@@ -113,7 +123,7 @@ def format_json_report(comparison: EnvComparison, example_path: str, env_path: s
         "missing": comparison.missing_keys,
         "empty": comparison.empty_keys,
         "extra": comparison.extra_keys,
-        "ok": not comparison.has_problems,
+        "ok": not comparison.fails_check(strict=strict),
     }
     return json.dumps(report_payload, indent=2)
 
@@ -126,7 +136,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     Returns:
         ``EXIT_OK`` normally, ``EXIT_PROBLEMS_FOUND`` when ``--check`` is set
-        and keys are missing or empty, ``EXIT_USAGE_ERROR`` when a file is
+        and keys are missing or empty (or extra, with ``--strict``), ``EXIT_USAGE_ERROR`` when a file is
         missing or malformed.
     """
     arguments = build_argument_parser().parse_args(argv)
@@ -143,9 +153,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     comparison = without_ignored_keys(
         compare_env_mappings(example_entries, actual_entries), arguments.ignore
     )
-    report_formatter = format_json_report if arguments.format == "json" else format_text_report
-    print(report_formatter(comparison, arguments.example_path, arguments.env_path))
-    if arguments.check and comparison.has_problems:
+    if arguments.format == "json":
+        print(
+            format_json_report(
+                comparison, arguments.example_path, arguments.env_path, strict=arguments.strict
+            )
+        )
+    else:
+        print(format_text_report(comparison, arguments.example_path, arguments.env_path))
+    # --strict without --check only changes the JSON "ok" flag; the exit code
+    # stays 0 so informational runs never fail unexpectedly.
+    if arguments.check and comparison.fails_check(strict=arguments.strict):
         return EXIT_PROBLEMS_FOUND
     return EXIT_OK
 
