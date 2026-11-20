@@ -63,6 +63,16 @@ any extra key remains after `--ignore` filtering.
 so an ignored key is removed consistently from all three buckets and the
 original result is never mutated.
 
+## Ignore files (`env_diff/ignore_file.py`)
+
+`parse_ignore_text` reads one key per line and strips everything after `#`
+(a `#` can never appear in a valid key, so this is safe), skipping blanks and
+de-duplicating while keeping file order. `read_ignore_file` opens the file as
+`utf-8-sig` for the same BOM reason as the env parser. `cli.collect_ignored_keys`
+merges these keys with `--ignore` flags; it only falls back to
+`./.env-diff-ignore` when no `--ignore-file` was given, and only if that file
+exists.
+
 ## Reporting (`env_diff/cli.py`)
 
 `format_text_report` prints a header and one section per non-empty bucket,

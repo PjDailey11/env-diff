@@ -1,7 +1,7 @@
 # env-diff options
 
 ```text
-env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--strict] [--ignore KEY ...] [--format {text,json}] [--version]
+env-diff [EXAMPLE_PATH] [ENV_PATH] [--check] [--strict] [--ignore KEY ...] [--ignore-file PATH] [--format {text,json}] [--version]
 ```
 
 ## Positional arguments
@@ -66,6 +66,28 @@ env-diff --check --ignore SENTRY_DSN --ignore DEBUG
 - Filtering is applied after comparison, so it behaves the same whichever
   bucket the key would have landed in. JSON output is filtered too.
 
+### `--ignore-file PATH` (default `./.env-diff-ignore` if it exists)
+
+Reads keys to ignore from a file instead of (or in addition to) repeated
+`--ignore` flags, so the list of optional keys can be committed once and
+shared by git hooks, CI jobs, and teammates.
+
+```text
+# .env-diff-ignore
+SENTRY_DSN          # only configured in production
+DEBUG
+```
+
+- One key per line. Blank lines, full-line `#` comments, and trailing
+  `# comments` are skipped; surrounding whitespace, `\r\n` line endings, and a
+  UTF-8 BOM are tolerated.
+- Keys from the file are combined with `--ignore` flags and behave exactly the
+  same way (removed from every section and from `--check` / `--strict`).
+- Without the flag, `./.env-diff-ignore` in the **current directory** is used
+  when it exists; a missing default file is silently fine.
+- An explicit `--ignore-file` that does not exist is a usage error (exit `2`),
+  because a typo there would otherwise silently ignore nothing.
+
 ### `--format {text,json}` (default `text`)
 
 `text` prints the human-readable report described below. `json` prints a
@@ -100,7 +122,7 @@ Prints `env-diff <version>` and exits `0`.
 | --- | --- |
 | `0` | Comparison ran (and, with `--check`, nothing is missing or empty). |
 | `1` | `--check` and at least one key is missing or empty (or extra, with `--strict`). |
-| `2` | A file does not exist, or a line could not be parsed. The error on stderr names the line number. |
+| `2` | A file (including an explicit `--ignore-file`) does not exist, or a line could not be parsed. The error on stderr names the line number. |
 
 Exit code `2` is distinct from `1` so CI scripts can tell "your config is
 incomplete" apart from "env-diff could not read the files at all". argparse
