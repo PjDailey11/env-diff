@@ -50,6 +50,27 @@ env-diff .env.example .env.production --check --strict
   extra keys exist in strict mode.
 - `--ignore` is applied first, so an ignored extra key never fails strict mode.
 
+### `--fix`
+
+Appends every **missing** key to `ENV_PATH`, using the template's value as a
+placeholder, then prints the report for the updated file.
+
+- Only appends. Existing lines, comments, and order are never changed, so the
+  worst case is an extra block you can delete.
+- The block starts with `# Added by env-diff --fix: fill in these values`,
+  separated from existing content by a blank line (a missing final newline is
+  handled).
+- `ENV_PATH` is created if it does not exist; without `--fix`, a missing env
+  file is still exit `2`.
+- Placeholders are re-quoted when needed (whitespace, `#`, leading quotes) so
+  they parse back to exactly the template value.
+- Optional (`# env-diff: optional`) and ignored keys are not added. Empty
+  keys are left alone: they already exist and only need a value.
+- A summary line naming the added keys (never values) goes to stderr unless
+  `--quiet` is set. Keys added with an empty placeholder then show as
+  *empty*, so `--fix --check` keeps failing until real values are filled in.
+- A write failure (for example, a missing directory) exits `2`.
+
 ### `--ignore KEY` (repeatable)
 
 Drops `KEY` from the missing, empty, and extra sections before the report is
@@ -137,7 +158,7 @@ Prints `env-diff <version>` and exits `0`.
 | --- | --- |
 | `0` | Comparison ran (and, with `--check`, nothing is missing or empty). |
 | `1` | `--check` and at least one key is missing or empty (or extra, with `--strict`). |
-| `2` | A file (including an explicit `--ignore-file`) does not exist, or a line could not be parsed. The error on stderr names the line number. |
+| `2` | A file (including an explicit `--ignore-file`) does not exist, a line could not be parsed, or `--fix` could not write the env file. The error on stderr names the line number. |
 
 Exit code `2` is distinct from `1` so CI scripts can tell "your config is
 incomplete" apart from "env-diff could not read the files at all". argparse
