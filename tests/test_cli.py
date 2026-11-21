@@ -204,3 +204,40 @@ def test_optional_keys_appear_in_json(tmp_path, capsys):
     assert payload["missing"] == ["A"]
     assert payload["optional"] == ["B"]
     assert payload["ok"] is False
+
+
+def test_fix_appends_missing_keys_and_reports_them_as_empty(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nPORT=8000\nB=\n", "A=1\n")
+    assert main([example_path, env_path, "--fix", "--check"]) == EXIT_PROBLEMS_FOUND
+    captured = capsys.readouterr()
+    assert "added 2 missing key(s)" in captured.err and "PORT, B" in captured.err
+    # PORT got a real placeholder so it is now fine; B is empty and still fails.
+    assert "Missing" not in captured.out
+    assert "Empty (1):\n  ? B" in captured.out
+    assert (tmp_path / ".env").read_text().startswith("A=1\n")
+
+
+def test_fix_creates_missing_env_file(tmp_path, capsys):
+    example_path = tmp_path / ".env.example"
+    example_path.write_text("PORT=8000\n")
+    env_path = tmp_path / ".env"
+    assert main([str(example_path), str(env_path), "--fix", "--check"]) == EXIT_OK
+    assert "PORT=8000" in env_path.read_text()
+
+
+def test_fix_skips_optional_and_ignored_keys(tmp_path, capsys):
+    example_path, env_path = _write_pair(
+        tmp_path, "A=\nSENTRY_DSN= # env-diff: optional\nLOCAL=\n", "A=1\n"
+    )
+    assert main([example_path, env_path, "--fix", "--ignore", "LOCAL"]) == EXIT_OK
+    assert (tmp_path / ".env").read_text() == "A=1\n"
+    assert capsys.readouterr().err == ""
+
+
+def test_fix_quiet_json_keeps_stdout_clean(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nB=2\n", "A=1\n")
+    assert main([example_path, env_path, "--fix", "--format", "json"]) == EXIT_OK
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["missing"] == []
+    assert main([example_path, env_path, "--fix", "-q"]) == EXIT_OK
+    assert capsys.readouterr().err == ""

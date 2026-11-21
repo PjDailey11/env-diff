@@ -67,6 +67,8 @@ into an issue or a CI log.
 - `--ignore KEY` (repeatable) for optional keys that may be missing or empty.
 - `--ignore-file PATH` (or an automatic `./.env-diff-ignore`) to commit the
   list of optional keys once and share it between hooks, CI, and teammates.
+- `--fix` appends missing keys to `.env` (creating it if needed) using the
+  template's placeholder values; existing lines are never modified.
 - `--quiet` / `-q` prints nothing (no report, no warnings) for hooks and CI
   steps that only need the exit code; file and parse errors still show.
 - `--format json` for scripts, CI annotations, and editor integrations.
@@ -180,6 +182,30 @@ $ env-diff --check --ignore SENTRY_DSN --ignore DEBUG
 
 Ignored keys disappear from every section (missing, empty, and extra) and
 never affect the exit code.
+
+### Example: filling in a fresh `.env` with `--fix`
+
+```text
+$ cat .env
+SECRET_KEY=dev-secret
+$ env-diff --fix --check
+env-diff: added 2 missing key(s) to .env: DATABASE_URL, PORT
+Comparing .env against .env.example
+Empty (1):
+  ? DATABASE_URL
+$ echo $?
+1
+$ cat .env
+SECRET_KEY=dev-secret
+
+# Added by env-diff --fix: fill in these values
+DATABASE_URL=
+PORT=8000
+```
+
+`PORT` picked up the template's `8000`, so it is done; `DATABASE_URL` had an
+empty placeholder, so `--check` keeps failing until you fill it in. Optional
+(`# env-diff: optional`) and ignored keys are never added.
 
 ### Example: marking optional keys in the template
 
@@ -297,6 +323,7 @@ Nothing is printed on stdout or stderr unless a file is missing or malformed
 | `ENV_PATH` | `.env` | The real env file to check. |
 | `--check` | off | Exit with status `1` if any key is missing or empty. |
 | `--strict` | off | With `--check`, extra keys also fail. Also makes JSON `ok` false when extra keys exist. |
+| `--fix` | off | Append missing keys to `ENV_PATH` with the template's placeholder values (creates the file if needed), then report on the updated file. Never edits existing lines. |
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--ignore-file PATH` | `./.env-diff-ignore` if present | Read keys to ignore from a file, one per line, `#` comments allowed. Combined with `--ignore`. A missing explicit file exits `2`. |
 | `-q`, `--quiet` | off | Print no report and no duplicate-key warnings; only the exit code. Errors (exit `2`) are still printed. |
@@ -311,7 +338,7 @@ More detail: [docs/options.md](docs/options.md).
 | --- | --- |
 | `0` | Comparison ran. With `--check`, no keys are missing or empty. |
 | `1` | `--check` was given and at least one key is missing or empty (or extra, with `--strict`). |
-| `2` | A file (including an explicit `--ignore-file`) was not found, or an env file contains a malformed line. |
+| `2` | A file (including an explicit `--ignore-file`) was not found, an env file contains a malformed line, or `--fix` could not write the env file. |
 
 ## Supported .env syntax
 
@@ -352,11 +379,13 @@ env-diff/
 │   ├── __main__.py         # python -m env_diff
 │   ├── cli.py              # argument parsing, report formatting, exit codes
 │   ├── compare.py          # EnvComparison and compare_env_mappings
+│   ├── fixer.py            # --fix: build and append missing assignments
 │   ├── ignore_file.py      # .env-diff-ignore / --ignore-file loading
 │   └── parser.py           # dotenv parsing (EnvEntry, EnvParseError)
 └── tests/
     ├── test_cli.py
     ├── test_compare.py
+    ├── test_fixer.py
     ├── test_ignore_file.py
     └── test_parser.py
 ```
@@ -380,7 +409,11 @@ env-diff/
 4. **Filter** out ignored keys with `compare.without_ignored_keys`. The list
    is `--ignore` flags plus `--ignore-file` (or `./.env-diff-ignore`), merged
    by `cli.collect_ignored_keys` using `ignore_file.read_ignore_file`.
-5. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
+5. **Fix** (only with `--fix`): `fixer.build_missing_key_lines` turns each
+   missing key into `KEY=placeholder` (re-quoting values that need it), and
+   `fixer.append_missing_keys` appends them under a labelled header. The env
+   file is then re-read and compared again so the report shows the new state.
+6. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
    `--format json`) and choose the exit code with
    `EnvComparison.fails_check(strict=...)`.
 
@@ -393,12 +426,13 @@ python3 -m venv /tmp/env-diff-venv
 ```
 
 The suite covers the parser (quoting, comments, `export`, duplicates, BOM,
-errors), the comparison rules, and the CLI end to end through `main()` with
+errors), the comparison rules, the `--fix` appender (quoting round trips, missing
+files, missing final newlines), and the CLI end to end through `main()` with
 temporary files.
 
 ## Roadmap
 
-- `--fix` to append missing keys (with the template's placeholder) to `.env`.
+- `--fix --dry-run` to preview what `--fix` would append.
 - Multi-line quoted values.
 
 ## Contributing

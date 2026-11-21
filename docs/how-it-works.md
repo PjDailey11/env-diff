@@ -101,6 +101,21 @@ merges these keys with `--ignore` flags; it only falls back to
 `./.env-diff-ignore` when no `--ignore-file` was given, and only if that file
 exists.
 
+## Fixing (`env_diff/fixer.py`)
+
+`build_missing_key_lines(missing_keys, example_entries)` produces
+`KEY=placeholder` lines in template order. `_format_placeholder` quotes a value
+when the parser would otherwise change it (surrounding whitespace, `#`, a
+leading quote), preferring double quotes and falling back to single quotes
+when the value contains `"`. `append_missing_keys(path, lines)` opens the file
+in append mode, adds a blank line and a header comment, and creates the file
+if needed; it writes nothing when there is nothing to add.
+
+In `cli.main`, `--fix` runs after the first comparison (so ignored and
+optional keys are already filtered out), then the env file is re-read and
+`cli.compare_files` runs again so the report and exit code describe the file
+as it is now.
+
 ## Reporting (`env_diff/cli.py`)
 
 `format_text_report` prints a header and one section per non-empty bucket,

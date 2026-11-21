@@ -10,8 +10,10 @@ from typing import Dict, List, Optional
 
 from env_diff import __version__
 from env_diff.compare import EnvComparison, compare_env_mappings, without_ignored_keys
+from env_diff.fixer import append_missing_keys, build_missing_key_lines
 from env_diff.ignore_file import DEFAULT_IGNORE_FILENAME, read_ignore_file
 from env_diff.parser import (
+    EnvEntry,
     EnvParseError,
     entries_to_mapping,
     find_duplicate_keys,
@@ -57,6 +59,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         help="with --check, also fail when .env has keys the template does not list",
+    )
+    argument_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help=(
+            "append missing keys to ENV_PATH using the template's placeholder values "
+            "(creates the file if needed; existing lines are never changed)"
+        ),
     )
     argument_parser.add_argument(
         "--ignore",
@@ -202,6 +212,32 @@ def format_duplicate_warnings(env_path: str, duplicate_lines_by_key: Dict[str, L
     ]
 
 
+def compare_files(
+    example_entry_list: List[EnvEntry],
+    actual_entry_list: List[EnvEntry],
+    ignored_keys: List[str],
+) -> EnvComparison:
+    """Compare parsed template and env entries, honoring markers and ignores.
+
+    Args:
+        example_entry_list: Every assignment in the template, in file order.
+        actual_entry_list: Every assignment in the env file, in file order.
+        ignored_keys: Keys from ``--ignore`` / ignore files to drop.
+
+    Returns:
+        The filtered :class:`EnvComparison`. Kept as one function so ``--fix``
+        can re-run exactly the same comparison after appending keys.
+    """
+    return without_ignored_keys(
+        compare_env_mappings(
+            entries_to_mapping(example_entry_list),
+            entries_to_mapping(actual_entry_list),
+            optional_keys=find_optional_keys(example_entry_list),
+        ),
+        ignored_keys,
+    )
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run env-diff and return a process exit code.
 
@@ -211,12 +247,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         ``EXIT_OK`` normally, ``EXIT_PROBLEMS_FOUND`` when ``--check`` is set
         and keys are missing or empty (or extra, with ``--strict``), ``EXIT_USAGE_ERROR`` when a file is
-        missing or malformed.
+        missing or malformed, or when ``--fix`` cannot write the env file.
     """
     arguments = build_argument_parser().parse_args(argv)
     try:
         example_entry_list = read_env_entries(Path(arguments.example_path))
-        actual_entry_list = read_env_entries(Path(arguments.env_path))
+        if arguments.fix and not Path(arguments.env_path).exists():
+            # A fresh clone has no .env yet; --fix is exactly how it gets
+            # created, so a missing env file is not an error in this mode.
+            actual_entry_list = []
+        else:
+            actual_entry_list = read_env_entries(Path(arguments.env_path))
         ignored_keys = collect_ignored_keys(arguments.ignore, arguments.ignore_file)
     except FileNotFoundError as error:
         print(f"env-diff: file not found: {error.filename}", file=sys.stderr)
@@ -238,14 +279,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             for warning_line in format_duplicate_warnings(checked_path, find_duplicate_keys(entry_list)):
                 print(warning_line, file=sys.stderr)
 
-    example_entries = entries_to_mapping(example_entry_list)
-    actual_entries = entries_to_mapping(actual_entry_list)
-    comparison = without_ignored_keys(
-        compare_env_mappings(
-            example_entries, actual_entries, optional_keys=find_optional_keys(example_entry_list)
-        ),
-        ignored_keys,
-    )
+    comparison = compare_files(example_entry_list, actual_entry_list, ignored_keys)
+    if arguments.fix and comparison.missing_keys:
+        assignment_lines = build_missing_key_lines(
+            comparison.missing_keys, entries_to_mapping(example_entry_list)
+        )
+        try:
+            added_count = append_missing_keys(Path(arguments.env_path), assignment_lines)
+        except OSError as error:
+            print(f"env-diff: could not update {arguments.env_path}: {error}", file=sys.stderr)
+            return EXIT_USAGE_ERROR
+        if not arguments.quiet:
+            # Key names only, on stderr, so JSON on stdout stays parseable.
+            print(
+                f"env-diff: added {added_count} missing key(s) to {arguments.env_path}: "
+                + ", ".join(comparison.missing_keys),
+                file=sys.stderr,
+            )
+        # Report on the file as it is now. Added keys usually carry an empty
+        # placeholder, so they show up as "empty" and --check still fails
+        # until someone fills in real values, which is the point.
+        actual_entry_list = read_env_entries(Path(arguments.env_path))
+        comparison = compare_files(example_entry_list, actual_entry_list, ignored_keys)
     # --quiet skips the report entirely; --format is still accepted so
     # scripts can toggle -q without rebuilding the rest of the command line.
     if not arguments.quiet:
