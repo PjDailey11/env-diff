@@ -64,6 +64,8 @@ into an issue or a CI log.
 - `--ignore KEY` (repeatable) for optional keys that may be missing or empty.
 - `--ignore-file PATH` (or an automatic `./.env-diff-ignore`) to commit the
   list of optional keys once and share it between hooks, CI, and teammates.
+- `--quiet` / `-q` prints nothing (no report, no warnings) for hooks and CI
+  steps that only need the exit code; file and parse errors still show.
 - `--format json` for scripts, CI annotations, and editor integrations.
 - Never prints values, only key names (in both text and JSON output).
 - Zero runtime dependencies; Python 3.9+.
@@ -247,6 +249,17 @@ stays parseable.
 exec env-diff --check
 ```
 
+### Example: exit code only
+
+```text
+$ env-diff --check --quiet
+$ echo $?
+1
+```
+
+Nothing is printed on stdout or stderr unless a file is missing or malformed
+(exit `2`), so a silent hook still tells you when its setup is broken.
+
 ## Options
 
 | Option | Default | Description |
@@ -257,6 +270,7 @@ exec env-diff --check
 | `--strict` | off | With `--check`, extra keys also fail. Also makes JSON `ok` false when extra keys exist. |
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--ignore-file PATH` | `./.env-diff-ignore` if present | Read keys to ignore from a file, one per line, `#` comments allowed. Combined with `--ignore`. A missing explicit file exits `2`. |
+| `-q`, `--quiet` | off | Print no report and no duplicate-key warnings; only the exit code. Errors (exit `2`) are still printed. |
 | `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
 

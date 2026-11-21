@@ -112,6 +112,18 @@ single JSON object instead:
   gate and capture details.
 - Errors (exit `2`) are still plain text on stderr, and stdout stays empty.
 
+### `-q`, `--quiet`
+
+Suppresses all normal output: no text or JSON report on stdout and no
+duplicate-key warnings on stderr. The exit code is unchanged, so
+`env-diff --check -q` is the quietest possible gate for a git hook.
+
+- Usage errors (missing file, malformed line, missing explicit
+  `--ignore-file`) are still printed to stderr with exit `2`. Hiding them
+  would make a misconfigured hook look like a passing one.
+- `--format` is accepted alongside `--quiet` and simply has no visible
+  effect, so scripts can add or drop `-q` without editing anything else.
+
 ### `--version`
 
 Prints `env-diff <version>` and exits `0`.
@@ -139,7 +151,7 @@ env-diff: warning: .env: SECRET_KEY is set 2 times (lines 2, 7); the last value 
 
 Warnings are informational: they do not affect the exit code (with or without
 `--check` / `--strict`) and never appear on stdout, so `--format json` output
-stays valid.
+stays valid. `--quiet` suppresses them.
 
 ## Text output format
 
