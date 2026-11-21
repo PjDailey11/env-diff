@@ -73,3 +73,26 @@ def test_fails_check_missing_keys_fail_in_both_modes():
     comparison = compare_env_mappings(_mapping("A=\nB="), _mapping("A=1"))
     assert comparison.fails_check()
     assert comparison.fails_check(strict=True)
+
+
+def test_unset_optional_keys_get_their_own_bucket():
+    comparison = compare_env_mappings(
+        _mapping("A=\nSENTRY_DSN=\nREGION=\n"),
+        _mapping("A=1\nREGION=\n"),
+        optional_keys=["SENTRY_DSN", "REGION"],
+    )
+    assert comparison.optional_keys == ["SENTRY_DSN", "REGION"]
+    assert (comparison.missing_keys, comparison.empty_keys) == ([], [])
+    assert not comparison.fails_check(strict=True)
+
+
+def test_set_optional_key_is_neither_reported_nor_extra():
+    comparison = compare_env_mappings(
+        _mapping("SENTRY_DSN=\n"), _mapping("SENTRY_DSN=https://x\n"), optional_keys=["SENTRY_DSN"]
+    )
+    assert (comparison.optional_keys, comparison.extra_keys) == ([], [])
+
+
+def test_without_ignored_keys_also_filters_optional_bucket():
+    comparison = compare_env_mappings(_mapping("A=\n"), _mapping(""), optional_keys=["A"])
+    assert without_ignored_keys(comparison, ["A"]).optional_keys == []

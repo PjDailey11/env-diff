@@ -21,11 +21,15 @@ class EnvComparison:
         empty_keys: Keys present in both files whose actual value is empty.
             A key set to ``""`` is technically defined but is almost always a
             forgotten placeholder.
+        optional_keys: Template keys marked ``# env-diff: optional`` that are
+            missing or empty in the actual file. They are reported for
+            visibility but never fail ``--check``, even with ``--strict``.
     """
 
     missing_keys: List[str] = field(default_factory=list)
     extra_keys: List[str] = field(default_factory=list)
     empty_keys: List[str] = field(default_factory=list)
+    optional_keys: List[str] = field(default_factory=list)
 
     @property
     def has_problems(self) -> bool:
@@ -56,6 +60,7 @@ class EnvComparison:
 def compare_env_mappings(
     example_entries: Dict[str, EnvEntry],
     actual_entries: Dict[str, EnvEntry],
+    optional_keys: Iterable[str] = (),
 ) -> EnvComparison:
     """Compare two parsed env mappings key by key.
 
@@ -64,14 +69,25 @@ def compare_env_mappings(
             keys should exist). Its values are ignored; templates usually hold
             placeholders.
         actual_entries: Parsed ``.env`` being checked.
+        optional_keys: Template keys that may be missing or empty (from
+            :func:`env_diff.parser.find_optional_keys`). When such a key is
+            missing or empty it goes to ``optional_keys`` instead of
+            ``missing_keys``/``empty_keys``. Present optional keys are simply
+            fine, and they are never "extra" because the template lists them.
 
     Returns:
         An :class:`EnvComparison`. Key comparison is case-sensitive because
         environment variables are case-sensitive on Linux and macOS.
     """
+    optional_key_set = set(optional_keys)
     comparison = EnvComparison()
     for example_key in example_entries:
-        if example_key not in actual_entries:
+        is_unset = example_key not in actual_entries or actual_entries[example_key].value == ""
+        if is_unset and example_key in optional_key_set:
+            # Checked before the missing/empty split so an optional key lands
+            # in exactly one bucket no matter which way it is unset.
+            comparison.optional_keys.append(example_key)
+        elif example_key not in actual_entries:
             comparison.missing_keys.append(example_key)
         elif actual_entries[example_key].value == "":
             comparison.empty_keys.append(example_key)
@@ -101,4 +117,5 @@ def without_ignored_keys(comparison: EnvComparison, ignored_keys: Iterable[str])
         missing_keys=[key for key in comparison.missing_keys if key not in ignored_key_set],
         extra_keys=[key for key in comparison.extra_keys if key not in ignored_key_set],
         empty_keys=[key for key in comparison.empty_keys if key not in ignored_key_set],
+        optional_keys=[key for key in comparison.optional_keys if key not in ignored_key_set],
     )

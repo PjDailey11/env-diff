@@ -18,6 +18,12 @@ from typing import Dict, List
 # being reported as syntax errors.
 _KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
 
+# Inline marker that flags a template key as optional, e.g.
+# ``SENTRY_DSN=  # env-diff: optional``. Matching is case-insensitive and
+# tolerant of spacing because people type these by hand; the word boundary
+# keeps ``optionally`` or ``optional-ish`` from counting by accident.
+_OPTIONAL_MARKER_PATTERN = re.compile(r"env-diff:\s*optional\b", re.IGNORECASE)
+
 
 class EnvParseError(ValueError):
     """Raised when a non-comment line cannot be read as ``KEY=value``.
@@ -42,11 +48,15 @@ class EnvEntry:
         value: Value with surrounding quotes and inline comments stripped.
         line_number: 1-based line where the assignment appeared, used to point
             users at the exact line in reports.
+        optional: True when the line's inline comment contains
+            ``env-diff: optional``. Only meaningful in the template; defaults
+            to False so existing ``EnvEntry(key, value, line)`` calls still work.
     """
 
     key: str
     value: str
     line_number: int
+    optional: bool = False
 
 
 def _strip_value(raw_value: str) -> str:
@@ -59,6 +69,10 @@ def _strip_value(raw_value: str) -> str:
     it (``COLOR=#fff``) stays part of the value.
     """
     stripped = raw_value.strip()
+    if raw_value[:1].isspace() and stripped.startswith("#"):
+        # ``KEY= # note`` is an empty value followed by a comment (as in
+        # python-dotenv), while ``COLOR=#fff`` with no space is a real value.
+        return ""
     if len(stripped) >= 2 and stripped[0] in "\"'":
         quote = stripped[0]
         closing_index = stripped.find(quote, 1)
@@ -71,6 +85,31 @@ def _strip_value(raw_value: str) -> str:
     if comment_index != -1:
         stripped = stripped[:comment_index]
     return stripped.strip()
+
+
+def _trailing_comment(raw_value: str) -> str:
+    """Return the inline comment after a value, or ``""`` if there is none.
+
+    Uses the same rules as :func:`_strip_value` so the two never disagree:
+    for a quoted value the comment can only start after the closing quote
+    (``"a # b"`` has no comment), and for an unquoted value it starts at the
+    first `` #``. An unterminated quote swallows the rest of the line, so it
+    has no comment either.
+    """
+    stripped = raw_value.strip()
+    if len(stripped) >= 2 and stripped[0] in "\"'":
+        closing_index = stripped.find(stripped[0], 1)
+        if closing_index == -1:
+            return ""
+        after_quote = stripped[closing_index + 1:]
+        hash_index = after_quote.find("#")
+        return after_quote[hash_index + 1:].strip() if hash_index != -1 else ""
+    if raw_value[:1].isspace() and stripped.startswith("#"):
+        # ``KEY= # note``: the value is empty and the remainder is a comment.
+        # Without the leading space (``COLOR=#fff``) the ``#`` is the value.
+        return stripped[1:].strip()
+    comment_index = stripped.find(" #")
+    return stripped[comment_index + 2:].strip() if comment_index != -1 else ""
 
 
 def parse_env_text(env_text: str) -> List[EnvEntry]:
@@ -100,7 +139,10 @@ def parse_env_text(env_text: str) -> List[EnvEntry]:
         key = raw_key.strip()
         if not _KEY_PATTERN.match(key):
             raise EnvParseError(line_number, line_text, f"invalid key name {key!r}")
-        parsed_entries.append(EnvEntry(key, _strip_value(raw_value), line_number))
+        is_optional = bool(_OPTIONAL_MARKER_PATTERN.search(_trailing_comment(raw_value)))
+        parsed_entries.append(
+            EnvEntry(key, _strip_value(raw_value), line_number, optional=is_optional)
+        )
     return parsed_entries
 
 
@@ -142,6 +184,25 @@ def find_duplicate_keys(entries: List[EnvEntry]) -> Dict[str, List[int]]:
         for key, line_numbers in line_numbers_by_key.items()
         if len(line_numbers) > 1
     }
+
+
+def find_optional_keys(entries: List[EnvEntry]) -> List[str]:
+    """List keys whose assignment carries a ``# env-diff: optional`` marker.
+
+    Args:
+        entries: Entries from :func:`parse_env_text`, normally the template's.
+
+    Returns:
+        Marked keys in first-appearance order, without duplicates. If a key is
+        assigned twice, it counts as optional when *any* assignment is marked:
+        the marker documents intent, and a duplicate is already reported as a
+        warning, so being lenient here avoids surprising check failures.
+    """
+    optional_keys: List[str] = []
+    for entry in entries:
+        if entry.optional and entry.key not in optional_keys:
+            optional_keys.append(entry.key)
+    return optional_keys
 
 
 def read_env_entries(env_path: Path) -> List[EnvEntry]:

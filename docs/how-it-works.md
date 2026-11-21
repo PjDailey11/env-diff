@@ -36,6 +36,17 @@ Each assignment becomes a frozen `EnvEntry(key, value, line_number)`.
 same key replaces the earlier value (last one wins, like a shell), while the
 key keeps its original position in the dict, so reports stay in file order.
 
+### Inline comments and optional markers
+
+An unquoted value ends at the first space followed by `#`, and a value that
+*starts* with whitespace then `#` (`KEY= # fill me in`) is empty, matching
+python-dotenv. `COLOR=#fff` keeps its `#` because there is no space before it.
+`_trailing_comment` applies the same quote-aware rules to extract the comment
+text, and if it contains `env-diff: optional` (case-insensitive, word
+boundary) the entry's `optional` flag is set. `find_optional_keys` returns the
+marked keys in order; a key counts as optional if any of its assignments is
+marked.
+
 ### What the parser does not do
 
 - No `${VAR}` interpolation and no command substitution. env-diff must never
@@ -51,6 +62,7 @@ key keeps its original position in the dict, so reports stay in file order.
 | `missing_keys` | key in example, not in actual | example file order |
 | `empty_keys` | key in both, actual value is `""` | example file order |
 | `extra_keys` | key in actual, not in example | actual file order |
+| `optional_keys` | key marked optional in example and missing or empty in actual | example file order |
 
 Comparison is case-sensitive (`API_KEY` and `api_key` are different variables
 on Linux and macOS). `has_problems` is true for missing or empty keys only.
@@ -58,9 +70,14 @@ on Linux and macOS). `has_problems` is true for missing or empty keys only.
 JSON `ok` flag: it returns `has_problems`, or, in strict mode, also true when
 any extra key remains after `--ignore` filtering.
 
+Optional keys are checked before the missing/empty split, so an unset
+optional key lands in exactly one bucket. `optional_keys` never counts toward
+`has_problems` or `fails_check`, even in strict mode, and a template key is
+never extra by definition.
+
 `without_ignored_keys(comparison, keys)` returns a filtered copy for
 `--ignore`. It runs after the comparison rather than editing the parsed files,
-so an ignored key is removed consistently from all three buckets and the
+so an ignored key is removed consistently from all four buckets and the
 original result is never mutated.
 
 ## Duplicate keys
