@@ -100,12 +100,15 @@ single JSON object instead:
   "missing": ["DATABASE_URL"],
   "empty": ["SECRET_KEY"],
   "extra": ["DEBUG"],
+  "optional": ["SENTRY_DSN"],
   "ok": false
 }
 ```
 
 - Lists keep file order (missing/empty follow the template, extra follows
   `.env`), so output is stable and diffable between runs.
+- `optional` lists template keys marked `# env-diff: optional` that are
+  missing or empty; they never make `ok` false.
 - `ok` is `true` exactly when `--check` would exit `0` (honoring `--strict`).
 - Values are never included, so the JSON is safe to upload as a CI artifact.
 - The format does not change exit codes; combine it with `--check` to both
@@ -163,7 +166,11 @@ Empty (N):
   ? KEY
 Extra (N):
   + KEY
+Optional, not set (N):
+  ~ KEY
 ```
 
-Sections with no keys are omitted. When there is nothing to report, the second
+Sections with no keys are omitted. `Optional, not set` lists template keys
+marked `# env-diff: optional` that are missing or empty; they are
+informational, so `All keys match.` can still follow them. When there is nothing to report, the second
 line is `All keys match.` Values are never printed.

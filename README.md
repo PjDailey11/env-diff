@@ -61,6 +61,9 @@ into an issue or a CI log.
 - Clear errors with line numbers for malformed lines.
 - Warns on stderr when a key is assigned more than once in either file (the
   last value silently wins, which can hide a real secret behind `KEY=`).
+- `# env-diff: optional` inline markers in the template: such keys may be
+  missing or empty without failing `--check` (even with `--strict`) and are
+  listed in their own "Optional, not set" section.
 - `--ignore KEY` (repeatable) for optional keys that may be missing or empty.
 - `--ignore-file PATH` (or an automatic `./.env-diff-ignore`) to commit the
   list of optional keys once and share it between hooks, CI, and teammates.
@@ -178,6 +181,32 @@ $ env-diff --check --ignore SENTRY_DSN --ignore DEBUG
 Ignored keys disappear from every section (missing, empty, and extra) and
 never affect the exit code.
 
+### Example: marking optional keys in the template
+
+Annotate the template itself so every teammate and CI job agrees on which
+keys are optional, without any extra flags:
+
+```bash
+# .env.example
+DATABASE_URL=
+SENTRY_DSN=        # env-diff: optional
+REGION=us-east-1   # env-diff: optional (defaults to us-east-1)
+```
+
+```text
+$ env-diff --check
+Comparing .env against .env.example
+Optional, not set (2):
+  ~ SENTRY_DSN
+  ~ REGION
+All keys match.
+$ echo $?
+0
+```
+
+The marker is case-insensitive and must be in the inline comment (after a
+space and `#`). A marker inside a quoted value does not count.
+
 ### Example: sharing optional keys in `.env-diff-ignore`
 
 Commit a `.env-diff-ignore` next to `.env.example` (one key per line, `#`
@@ -271,7 +300,7 @@ Nothing is printed on stdout or stderr unless a file is missing or malformed
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--ignore-file PATH` | `./.env-diff-ignore` if present | Read keys to ignore from a file, one per line, `#` comments allowed. Combined with `--ignore`. A missing explicit file exits `2`. |
 | `-q`, `--quiet` | off | Print no report and no duplicate-key warnings; only the exit code. Errors (exit `2`) are still printed. |
-| `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `ok`, and both paths. |
+| `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `optional`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
 
 More detail: [docs/options.md](docs/options.md).
@@ -296,6 +325,8 @@ More detail: [docs/options.md](docs/options.md).
 | `GREETING='hi there'` | `GREETING` | `hi there` |
 | `URL=a=b=c` | `URL` | `a=b=c` (split on the first `=` only) |
 | `EMPTY=` / `EMPTY=""` | `EMPTY` | empty string |
+| `KEY= # note` | `KEY` | empty string (space then `#` starts a comment) |
+| `KEY= # env-diff: optional` | `KEY` | empty string, and the key is marked optional |
 | `# comment` / blank line | skipped | |
 | `server.port=80` | `server.port` | `80` (dots and dashes allowed in keys) |
 
@@ -342,7 +373,9 @@ env-diff/
    overwrite earlier ones but keep the first key's position.
 3. **Compare** the two mappings (`compare.compare_env_mappings`): template keys
    not in `.env` are *missing*, template keys whose `.env` value is empty are
-   *empty*, and `.env` keys not in the template are *extra*. Keys are
+   *empty*, and `.env` keys not in the template are *extra*. Template keys
+   marked `# env-diff: optional` (`parser.find_optional_keys`) that are
+   missing or empty go to a separate *optional* bucket instead. Keys are
    case-sensitive, matching how Linux and macOS treat environment variables.
 4. **Filter** out ignored keys with `compare.without_ignored_keys`. The list
    is `--ignore` flags plus `--ignore-file` (or `./.env-diff-ignore`), merged
@@ -365,7 +398,6 @@ temporary files.
 
 ## Roadmap
 
-- Mark optional keys inline with `# env-diff: optional` comments in the template.
 - `--fix` to append missing keys (with the template's placeholder) to `.env`.
 - Multi-line quoted values.
 
