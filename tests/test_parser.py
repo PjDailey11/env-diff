@@ -6,6 +6,7 @@ from env_diff.parser import (
     EnvParseError,
     entries_to_mapping,
     find_duplicate_keys,
+    find_optional_keys,
     parse_env_text,
     read_env_entries,
     read_env_file,
@@ -102,3 +103,39 @@ def test_read_env_entries_keeps_duplicates(tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("KEY=first\nKEY=second\n")
     assert [entry.value for entry in read_env_entries(env_path)] == ["first", "second"]
+
+
+@pytest.mark.parametrize(
+    "line, expected_optional, expected_value",
+    [
+        ("SENTRY_DSN=  # env-diff: optional", True, ""),
+        ("SENTRY_DSN= # env-diff: optional", True, ""),
+        ("REGION=us-east-1 # Env-Diff:Optional (only in prod)", True, "us-east-1"),
+        ('TITLE="a # env-diff: optional"', False, "a # env-diff: optional"),
+        ('TITLE="x" # env-diff: optional', True, "x"),
+        ("COLOR=#env-diff:optional", False, "#env-diff:optional"),
+        ("PORT=80 # env-diff: optionally set", False, "80"),
+        ("PORT=80 # required", False, "80"),
+    ],
+)
+def test_optional_marker_detection(line, expected_optional, expected_value):
+    (entry,) = parse_env_text(line)
+    assert entry.optional is expected_optional
+    assert entry.value == expected_value
+
+
+def test_find_optional_keys_keeps_order_and_dedupes():
+    entries = parse_env_text(
+        "A=\nB= # env-diff: optional\nC= # env-diff: optional\nB=\n"
+    )
+    assert find_optional_keys(entries) == ["B", "C"]
+
+
+def test_find_optional_keys_empty_without_markers():
+    assert find_optional_keys(parse_env_text("A=\nB=1 # note\n")) == []
+
+
+def test_space_then_hash_after_equals_is_an_empty_value():
+    (commented, color) = parse_env_text("SECRET_KEY= # fill me in\nCOLOR=#fff\n")
+    assert commented.value == ""
+    assert color.value == "#fff"
