@@ -15,6 +15,7 @@ from env_diff.parser import (
     EnvParseError,
     entries_to_mapping,
     find_duplicate_keys,
+    find_optional_keys,
     read_env_entries,
 )
 
@@ -108,12 +109,17 @@ def format_text_report(comparison: EnvComparison, example_path: str, env_path: s
         ("Missing", comparison.missing_keys, "-"),
         ("Empty", comparison.empty_keys, "?"),
         ("Extra", comparison.extra_keys, "+"),
+        # "~" reads as "approximately required": listed so the user knows the
+        # key is unset, but it never affects --check.
+        ("Optional, not set", comparison.optional_keys, "~"),
     ]
     for section_title, section_keys, marker in sections:
         if section_keys:
             report_lines.append(f"{section_title} ({len(section_keys)}):")
             report_lines.extend(f"  {marker} {key}" for key in section_keys)
     if not (comparison.missing_keys or comparison.empty_keys or comparison.extra_keys):
+        # Unset optional keys are allowed, so the summary line still appears
+        # (after their section) to make it obvious nothing needs fixing.
         report_lines.append("All keys match.")
     return "\n".join(report_lines)
 
@@ -134,7 +140,8 @@ def format_json_report(
 
     Returns:
         A JSON string with ``example_path``, ``env_path``, ``missing``,
-        ``empty``, ``extra`` (key names only, never values) and ``ok``, which
+        ``empty``, ``extra``, ``optional`` (unset optional template keys;
+        key names only, never values) and ``ok``, which
         is true exactly when ``--check`` (with the same ``--strict``) would pass. Lists keep file order so
         output is stable across runs and easy to diff.
     """
@@ -144,6 +151,7 @@ def format_json_report(
         "missing": comparison.missing_keys,
         "empty": comparison.empty_keys,
         "extra": comparison.extra_keys,
+        "optional": comparison.optional_keys,
         "ok": not comparison.fails_check(strict=strict),
     }
     return json.dumps(report_payload, indent=2)
@@ -233,7 +241,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     example_entries = entries_to_mapping(example_entry_list)
     actual_entries = entries_to_mapping(actual_entry_list)
     comparison = without_ignored_keys(
-        compare_env_mappings(example_entries, actual_entries), ignored_keys
+        compare_env_mappings(
+            example_entries, actual_entries, optional_keys=find_optional_keys(example_entry_list)
+        ),
+        ignored_keys,
     )
     # --quiet skips the report entirely; --format is still accepted so
     # scripts can toggle -q without rebuilding the rest of the command line.

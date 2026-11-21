@@ -185,3 +185,22 @@ def test_quiet_still_reports_usage_errors(tmp_path, capsys):
     example_path, _ = _write_pair(tmp_path, "A=\n", "A=1\n")
     assert main([example_path, missing_path, "--quiet"]) == EXIT_USAGE_ERROR
     assert "file not found" in capsys.readouterr().err
+
+
+def test_optional_marker_keeps_check_green_and_lists_key(tmp_path, capsys):
+    example_path, env_path = _write_pair(
+        tmp_path, "A=\nSENTRY_DSN=  # env-diff: optional\n", "A=1\n"
+    )
+    assert main([example_path, env_path, "--check", "--strict"]) == EXIT_OK
+    output = capsys.readouterr().out
+    assert "Optional, not set (1):\n  ~ SENTRY_DSN" in output
+    assert "All keys match." in output
+
+
+def test_optional_keys_appear_in_json(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nB= # env-diff: optional\n", "")
+    assert main([example_path, env_path, "--format", "json"]) == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["missing"] == ["A"]
+    assert payload["optional"] == ["B"]
+    assert payload["ok"] is False
