@@ -1,6 +1,6 @@
 """Tests for env_diff.compare."""
 
-from env_diff.compare import compare_env_mappings
+from env_diff.compare import compare_env_mappings, without_ignored_keys
 from env_diff.parser import entries_to_mapping, parse_env_text
 
 
@@ -48,8 +48,6 @@ def test_comparison_is_case_sensitive():
 
 
 def test_without_ignored_keys_drops_from_every_bucket():
-    from env_diff.compare import without_ignored_keys
-
     original = compare_env_mappings(_mapping("A=\nB=\nC="), _mapping("B=\nC=1\nX=1"))
     filtered = without_ignored_keys(original, ["A", "B", "X", "NOT_PRESENT"])
     assert (filtered.missing_keys, filtered.empty_keys, filtered.extra_keys) == ([], [], [])

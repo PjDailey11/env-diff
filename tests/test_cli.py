@@ -1,5 +1,7 @@
 """End-to-end tests for env_diff.cli.main."""
 
+import json
+
 from env_diff.cli import EXIT_OK, EXIT_PROBLEMS_FOUND, EXIT_USAGE_ERROR, main
 
 
@@ -57,8 +59,6 @@ def test_defaults_to_dotenv_files_in_current_directory(tmp_path, monkeypatch, ca
 
 
 def test_json_format_lists_buckets_and_ok_flag(tmp_path, capsys):
-    import json
-
     example_path, env_path = _write_pair(tmp_path, "A=\nB=\nC=\n", "B=\nC=3\nX=1\n")
     assert main([example_path, env_path, "--format", "json"]) == EXIT_OK
     payload = json.loads(capsys.readouterr().out)
@@ -101,8 +101,6 @@ def test_strict_without_check_still_exits_zero(tmp_path):
 
 
 def test_strict_json_ok_flag_matches_exit_code(tmp_path, capsys):
-    import json
-
     example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nSTALE=1\n")
     main([example_path, env_path, "--format", "json"])
     assert json.loads(capsys.readouterr().out)["ok"] is True
@@ -154,8 +152,6 @@ def test_duplicate_keys_warn_on_stderr_without_changing_exit_code(tmp_path, caps
     assert f"{env_path}: SECRET_KEY is set 2 times (lines 1, 3)" in captured.err
     # stdout must stay valid JSON and must never leak the shadowed value.
     assert "real-value" not in captured.err + captured.out
-    import json
-
     assert json.loads(captured.out)["empty"] == ["SECRET_KEY"]
 
 
