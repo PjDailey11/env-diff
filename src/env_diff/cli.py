@@ -74,6 +74,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     argument_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="print no report and no warnings; only the exit code (errors are still shown)",
+    )
+    argument_parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
@@ -214,26 +220,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Warnings go to stderr so text reports and JSON on stdout stay
     # machine-readable, and they never change the exit code: duplicates are
     # suspicious but the file still loads the same way a shell would read it.
-    for checked_path, entry_list in (
-        (arguments.example_path, example_entry_list),
-        (arguments.env_path, actual_entry_list),
-    ):
-        for warning_line in format_duplicate_warnings(checked_path, find_duplicate_keys(entry_list)):
-            print(warning_line, file=sys.stderr)
+    # --quiet silences them too, but the usage errors above are deliberately
+    # printed before this point so a broken setup is never hidden.
+    if not arguments.quiet:
+        for checked_path, entry_list in (
+            (arguments.example_path, example_entry_list),
+            (arguments.env_path, actual_entry_list),
+        ):
+            for warning_line in format_duplicate_warnings(checked_path, find_duplicate_keys(entry_list)):
+                print(warning_line, file=sys.stderr)
 
     example_entries = entries_to_mapping(example_entry_list)
     actual_entries = entries_to_mapping(actual_entry_list)
     comparison = without_ignored_keys(
         compare_env_mappings(example_entries, actual_entries), ignored_keys
     )
-    if arguments.format == "json":
-        print(
-            format_json_report(
-                comparison, arguments.example_path, arguments.env_path, strict=arguments.strict
+    # --quiet skips the report entirely; --format is still accepted so
+    # scripts can toggle -q without rebuilding the rest of the command line.
+    if not arguments.quiet:
+        if arguments.format == "json":
+            print(
+                format_json_report(
+                    comparison, arguments.example_path, arguments.env_path, strict=arguments.strict
+                )
             )
-        )
-    else:
-        print(format_text_report(comparison, arguments.example_path, arguments.env_path))
+        else:
+            print(format_text_report(comparison, arguments.example_path, arguments.env_path))
     # --strict without --check only changes the JSON "ok" flag; the exit code
     # stays 0 so informational runs never fail unexpectedly.
     if arguments.check and comparison.fails_check(strict=arguments.strict):

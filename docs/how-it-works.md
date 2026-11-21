@@ -90,5 +90,7 @@ exists.
 using `-` for missing, `?` for empty, and `+` for extra (diff-like markers).
 `format_json_report` serializes the same three buckets plus an `ok` flag for
 `--format json`.
+With `--quiet`, `main` skips both the warnings and the report but still
+prints usage errors, which happen earlier, before any output decision.
 `main` maps outcomes to exit codes `0`, `1` (`--check` with problems), and
 `2` (missing or malformed file).
