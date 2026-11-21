@@ -159,3 +159,29 @@ def test_clean_files_print_no_warnings(tmp_path, capsys):
     example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\n")
     main([example_path, env_path])
     assert capsys.readouterr().err == ""
+
+
+def test_quiet_prints_nothing_but_keeps_check_exit_code(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nB=\n", "A=1\n")
+    assert main([example_path, env_path, "--check", "--quiet"]) == EXIT_PROBLEMS_FOUND
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == ("", "")
+
+
+def test_quiet_short_flag_and_clean_pair_exit_zero(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\n")
+    assert main([example_path, env_path, "--check", "-q", "--format", "json"]) == EXIT_OK
+    assert capsys.readouterr().out == ""
+
+
+def test_quiet_silences_duplicate_key_warnings(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\nA=2\n")
+    assert main([example_path, env_path, "--quiet"]) == EXIT_OK
+    assert capsys.readouterr().err == ""
+
+
+def test_quiet_still_reports_usage_errors(tmp_path, capsys):
+    missing_path = str(tmp_path / "missing.env")
+    example_path, _ = _write_pair(tmp_path, "A=\n", "A=1\n")
+    assert main([example_path, missing_path, "--quiet"]) == EXIT_USAGE_ERROR
+    assert "file not found" in capsys.readouterr().err
