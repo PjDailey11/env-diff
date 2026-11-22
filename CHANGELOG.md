@@ -26,6 +26,8 @@ Every pull request that changes behavior should add a line under
   `--check` (#12, #15).
 - `--fix`: append missing keys to the env file using the template's
   placeholder values, creating the file if needed (#13, #16).
+- `--dry-run`: with `--fix`, print the block that would be appended instead
+  of writing it (#17).
 
 ### Fixed
 

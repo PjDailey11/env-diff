@@ -71,6 +71,24 @@ placeholder, then prints the report for the updated file.
   *empty*, so `--fix --check` keeps failing until real values are filled in.
 - A write failure (for example, a missing directory) exits `2`.
 
+### `--dry-run`
+
+Only valid with `--fix`. Prints the block that `--fix` would append and
+writes nothing; `ENV_PATH` is not created if it does not exist.
+
+- The preview starts with `env-diff: --dry-run: would append N key(s) to
+  ENV_PATH:` followed by the exact text, including the header comment. It is
+  produced by the same `render_fix_block` function the real write uses, so the
+  two cannot drift apart.
+- The preview goes to stdout in text mode and to stderr with `--format json`,
+  keeping stdout a single valid JSON document. `--quiet` suppresses it.
+- The report and exit code then describe the file as it is now, so with
+  `--check` a dry run fails exactly when a plain `--check` would.
+- When nothing is missing, there is no preview, only the normal report.
+- `--dry-run` without `--fix` exits `2` with
+  `env-diff: --dry-run only makes sense together with --fix`, rather than
+  silently running a plain report.
+
 ### `--ignore KEY` (repeatable)
 
 Drops `KEY` from the missing, empty, and extra sections before the report is
@@ -158,7 +176,7 @@ Prints `env-diff <version>` and exits `0`.
 | --- | --- |
 | `0` | Comparison ran (and, with `--check`, nothing is missing or empty). |
 | `1` | `--check` and at least one key is missing or empty (or extra, with `--strict`). |
-| `2` | A file (including an explicit `--ignore-file`) does not exist, a line could not be parsed, or `--fix` could not write the env file. The error on stderr names the line number. |
+| `2` | A file (including an explicit `--ignore-file`) does not exist, a line could not be parsed, `--fix` could not write the env file, or `--dry-run` was given without `--fix`. The error on stderr names the line number. |
 
 Exit code `2` is distinct from `1` so CI scripts can tell "your config is
 incomplete" apart from "env-diff could not read the files at all". argparse

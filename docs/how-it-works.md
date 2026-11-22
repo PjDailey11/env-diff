@@ -116,6 +116,12 @@ optional keys are already filtered out), then the env file is re-read and
 `cli.compare_files` runs again so the report and exit code describe the file
 as it is now.
 
+`render_fix_block(lines)` returns the header plus assignments as one string;
+`append_missing_keys` writes that string (after a separator) and
+`--fix --dry-run` prints it instead. `cli._finish_report` prints the report
+and picks the exit code for both paths, so a dry run reports and exits exactly
+like a plain run on the unchanged file.
+
 ## Reporting (`env_diff/cli.py`)
 
 `format_text_report` prints a header and one section per non-empty bucket,
