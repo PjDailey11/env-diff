@@ -63,6 +63,25 @@ def build_missing_key_lines(missing_keys: List[str], example_entries: Dict[str, 
     return lines
 
 
+def render_fix_block(assignment_lines: List[str]) -> str:
+    """Return the labelled block that ``--fix`` appends, without separators.
+
+    Shared by :func:`append_missing_keys` and ``--fix --dry-run`` so the
+    preview is byte-for-byte the text that a real run would write; keeping a
+    second copy of the formatting in the CLI would let the two drift apart.
+
+    Args:
+        assignment_lines: Output of :func:`build_missing_key_lines`.
+
+    Returns:
+        The header comment followed by one assignment per line, ending with a
+        newline, or ``""`` when there is nothing to add.
+    """
+    if not assignment_lines:
+        return ""
+    return "\n".join([FIX_BLOCK_HEADER, *assignment_lines]) + "\n"
+
+
 def append_missing_keys(env_path: Path, assignment_lines: List[str]) -> int:
     """Append assignment lines to ``env_path`` under a labelled header.
 
@@ -90,7 +109,7 @@ def append_missing_keys(env_path: Path, assignment_lines: List[str]) -> int:
         # a final newline, and leave one blank line before the header so the
         # appended section is easy to spot.
         separator = "\n" if existing_text.endswith("\n") else "\n\n"
-    appended_block = separator + "\n".join([FIX_BLOCK_HEADER, *assignment_lines]) + "\n"
+    appended_block = separator + render_fix_block(assignment_lines)
     with env_path.open("a", encoding="utf-8") as env_file:
         env_file.write(appended_block)
     return len(assignment_lines)
