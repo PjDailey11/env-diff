@@ -69,6 +69,8 @@ into an issue or a CI log.
   list of optional keys once and share it between hooks, CI, and teammates.
 - `--fix` appends missing keys to `.env` (creating it if needed) using the
   template's placeholder values; existing lines are never modified.
+- `--fix --dry-run` prints exactly the block `--fix` would append, without
+  writing or creating anything, so you can review it first.
 - `--quiet` / `-q` prints nothing (no report, no warnings) for hooks and CI
   steps that only need the exit code; file and parse errors still show.
 - `--format json` for scripts, CI annotations, and editor integrations.
@@ -207,6 +209,33 @@ PORT=8000
 empty placeholder, so `--check` keeps failing until you fill it in. Optional
 (`# env-diff: optional`) and ignored keys are never added.
 
+### Example: previewing `--fix` with `--dry-run`
+
+```text
+$ cat .env
+SECRET_KEY=dev-secret
+$ env-diff --fix --dry-run --check
+env-diff: --dry-run: would append 2 key(s) to .env:
+# Added by env-diff --fix: fill in these values
+DATABASE_URL=
+PORT=8000
+
+Comparing .env against .env.example
+Missing (2):
+  - DATABASE_URL
+  - PORT
+$ echo $?
+1
+$ cat .env
+SECRET_KEY=dev-secret
+```
+
+The preview is the same text a real `--fix` run would write (both use
+`fixer.render_fix_block`). Because nothing was written, the report and the
+exit code still describe the file as it is. With `--format json` the preview
+goes to stderr so stdout stays valid JSON; `--quiet` hides it. `--dry-run`
+without `--fix` is a usage error (exit `2`).
+
 ### Example: marking optional keys in the template
 
 Annotate the template itself so every teammate and CI job agrees on which
@@ -324,6 +353,7 @@ Nothing is printed on stdout or stderr unless a file is missing or malformed
 | `--check` | off | Exit with status `1` if any key is missing or empty. |
 | `--strict` | off | With `--check`, extra keys also fail. Also makes JSON `ok` false when extra keys exist. |
 | `--fix` | off | Append missing keys to `ENV_PATH` with the template's placeholder values (creates the file if needed), then report on the updated file. Never edits existing lines. |
+| `--dry-run` | off | With `--fix`, print the block that would be appended (stdout, or stderr with `--format json`) and write nothing. Without `--fix`, exit `2`. |
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--ignore-file PATH` | `./.env-diff-ignore` if present | Read keys to ignore from a file, one per line, `#` comments allowed. Combined with `--ignore`. A missing explicit file exits `2`. |
 | `-q`, `--quiet` | off | Print no report and no duplicate-key warnings; only the exit code. Errors (exit `2`) are still printed. |
@@ -338,7 +368,7 @@ More detail: [docs/options.md](docs/options.md).
 | --- | --- |
 | `0` | Comparison ran. With `--check`, no keys are missing or empty. |
 | `1` | `--check` was given and at least one key is missing or empty (or extra, with `--strict`). |
-| `2` | A file (including an explicit `--ignore-file`) was not found, an env file contains a malformed line, or `--fix` could not write the env file. |
+| `2` | A file (including an explicit `--ignore-file`) was not found, an env file contains a malformed line, `--fix` could not write the env file, or `--dry-run` was given without `--fix`. |
 
 ## Supported .env syntax
 
@@ -413,6 +443,8 @@ env-diff/
    missing key into `KEY=placeholder` (re-quoting values that need it), and
    `fixer.append_missing_keys` appends them under a labelled header. The env
    file is then re-read and compared again so the report shows the new state.
+   With `--dry-run`, `fixer.render_fix_block` builds the same block and it is
+   printed instead of written, and the report covers the unchanged file.
 6. **Report** with `cli.format_text_report` (or `cli.format_json_report` for
    `--format json`) and choose the exit code with
    `EnvComparison.fails_check(strict=...)`.
@@ -427,12 +459,11 @@ python3 -m venv /tmp/env-diff-venv
 
 The suite covers the parser (quoting, comments, `export`, duplicates, BOM,
 errors), the comparison rules, the `--fix` appender (quoting round trips, missing
-files, missing final newlines), and the CLI end to end through `main()` with
+files, missing final newlines, and that the `--dry-run` preview matches what is written), and the CLI end to end through `main()` with
 temporary files.
 
 ## Roadmap
 
-- `--fix --dry-run` to preview what `--fix` would append.
 - Multi-line quoted values.
 
 ## Contributing

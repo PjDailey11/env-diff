@@ -2,7 +2,12 @@
 
 import pytest
 
-from env_diff.fixer import FIX_BLOCK_HEADER, append_missing_keys, build_missing_key_lines
+from env_diff.fixer import (
+    FIX_BLOCK_HEADER,
+    append_missing_keys,
+    build_missing_key_lines,
+    render_fix_block,
+)
 from env_diff.parser import entries_to_mapping, parse_env_text, read_env_file
 
 
@@ -49,3 +54,14 @@ def test_append_nothing_leaves_file_untouched(tmp_path):
     env_path = tmp_path / ".env"
     assert append_missing_keys(env_path, []) == 0
     assert not env_path.exists()
+
+
+def test_render_fix_block_matches_what_append_writes(tmp_path):
+    env_path = tmp_path / ".env"
+    assignment_lines = ["A=", "PORT=8000"]
+    append_missing_keys(env_path, assignment_lines)
+    assert env_path.read_text() == render_fix_block(assignment_lines)
+
+
+def test_render_fix_block_is_empty_without_lines():
+    assert render_fix_block([]) == ""
