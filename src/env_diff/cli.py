@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 
 from env_diff import __version__
 from env_diff.compare import EnvComparison, compare_env_mappings, without_ignored_keys
-from env_diff.fixer import append_missing_keys, build_missing_key_lines
+from env_diff.fixer import append_missing_keys, build_missing_key_lines, render_fix_block
 from env_diff.ignore_file import DEFAULT_IGNORE_FILENAME, read_ignore_file
 from env_diff.parser import (
     EnvEntry,
@@ -67,6 +67,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "append missing keys to ENV_PATH using the template's placeholder values "
             "(creates the file if needed; existing lines are never changed)"
         ),
+    )
+    argument_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --fix, print the block that would be appended instead of writing it",
     )
     argument_parser.add_argument(
         "--ignore",
@@ -238,6 +243,39 @@ def compare_files(
     )
 
 
+def _finish_report(arguments: argparse.Namespace, comparison: EnvComparison) -> int:
+    """Print the report (unless ``--quiet``) and return the exit code.
+
+    Split out of :func:`main` because both the normal path and the
+    ``--fix --dry-run`` early return end the same way; one copy keeps the
+    exit-code rules from diverging between them.
+
+    Args:
+        arguments: Parsed command-line arguments.
+        comparison: The comparison to report on.
+
+    Returns:
+        ``EXIT_PROBLEMS_FOUND`` when ``--check`` is set and the comparison
+        fails (with ``--strict`` taken into account), else ``EXIT_OK``.
+    """
+    # --quiet skips the report entirely; --format is still accepted so
+    # scripts can toggle -q without rebuilding the rest of the command line.
+    if not arguments.quiet:
+        if arguments.format == "json":
+            print(
+                format_json_report(
+                    comparison, arguments.example_path, arguments.env_path, strict=arguments.strict
+                )
+            )
+        else:
+            print(format_text_report(comparison, arguments.example_path, arguments.env_path))
+    # --strict without --check only changes the JSON "ok" flag; the exit code
+    # stays 0 so informational runs never fail unexpectedly.
+    if arguments.check and comparison.fails_check(strict=arguments.strict):
+        return EXIT_PROBLEMS_FOUND
+    return EXIT_OK
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run env-diff and return a process exit code.
 
@@ -250,6 +288,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         missing or malformed, or when ``--fix`` cannot write the env file.
     """
     arguments = build_argument_parser().parse_args(argv)
+    if arguments.dry_run and not arguments.fix:
+        # Rejected instead of ignored: someone typing --dry-run expects that
+        # nothing gets written, and silently running a plain report would hide
+        # a typo like "--dry-run --fx" in a script.
+        print("env-diff: --dry-run only makes sense together with --fix", file=sys.stderr)
+        return EXIT_USAGE_ERROR
     try:
         example_entry_list = read_env_entries(Path(arguments.example_path))
         if arguments.fix and not Path(arguments.env_path).exists():
@@ -284,6 +328,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         assignment_lines = build_missing_key_lines(
             comparison.missing_keys, entries_to_mapping(example_entry_list)
         )
+        if arguments.dry_run:
+            # The preview goes to stdout next to the text report, but to
+            # stderr with --format json so stdout stays one valid JSON
+            # document. The report that follows describes the file as it is
+            # now, because nothing was written.
+            if not arguments.quiet:
+                preview_stream = sys.stderr if arguments.format == "json" else sys.stdout
+                print(
+                    f"env-diff: --dry-run: would append {len(assignment_lines)} key(s) "
+                    f"to {arguments.env_path}:",
+                    file=preview_stream,
+                )
+                print(render_fix_block(assignment_lines), file=preview_stream)
+            return _finish_report(arguments, comparison)
         try:
             added_count = append_missing_keys(Path(arguments.env_path), assignment_lines)
         except OSError as error:
@@ -301,22 +359,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         # until someone fills in real values, which is the point.
         actual_entry_list = read_env_entries(Path(arguments.env_path))
         comparison = compare_files(example_entry_list, actual_entry_list, ignored_keys)
-    # --quiet skips the report entirely; --format is still accepted so
-    # scripts can toggle -q without rebuilding the rest of the command line.
-    if not arguments.quiet:
-        if arguments.format == "json":
-            print(
-                format_json_report(
-                    comparison, arguments.example_path, arguments.env_path, strict=arguments.strict
-                )
-            )
-        else:
-            print(format_text_report(comparison, arguments.example_path, arguments.env_path))
-    # --strict without --check only changes the JSON "ok" flag; the exit code
-    # stays 0 so informational runs never fail unexpectedly.
-    if arguments.check and comparison.fails_check(strict=arguments.strict):
-        return EXIT_PROBLEMS_FOUND
-    return EXIT_OK
+    return _finish_report(arguments, comparison)
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised through the console script

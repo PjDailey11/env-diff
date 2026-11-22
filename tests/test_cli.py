@@ -241,3 +241,36 @@ def test_fix_quiet_json_keeps_stdout_clean(tmp_path, capsys):
     assert json.loads(captured.out)["missing"] == []
     assert main([example_path, env_path, "--fix", "-q"]) == EXIT_OK
     assert capsys.readouterr().err == ""
+
+
+def test_fix_dry_run_previews_block_and_leaves_file_untouched(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nPORT=8000\n", "A=1\n")
+    assert main([example_path, env_path, "--fix", "--dry-run", "--check"]) == EXIT_PROBLEMS_FOUND
+    output = capsys.readouterr().out
+    assert "would append 1 key(s)" in output
+    assert "# Added by env-diff --fix" in output and "PORT=8000" in output
+    # The report describes the unchanged file, so PORT is still missing.
+    assert "Missing (1):\n  - PORT" in output
+    assert (tmp_path / ".env").read_text() == "A=1\n"
+
+
+def test_fix_dry_run_does_not_create_missing_env_file(tmp_path, capsys):
+    example_path = tmp_path / ".env.example"
+    example_path.write_text("A=\n")
+    env_path = tmp_path / ".env"
+    assert main([str(example_path), str(env_path), "--fix", "--dry-run"]) == EXIT_OK
+    assert not env_path.exists()
+
+
+def test_fix_dry_run_json_sends_preview_to_stderr(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nB=\n", "A=1\n")
+    main([example_path, env_path, "--fix", "--dry-run", "--format", "json"])
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["missing"] == ["B"]
+    assert "would append 1 key(s)" in captured.err
+
+
+def test_dry_run_without_fix_is_usage_error(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\n", "A=1\n")
+    assert main([example_path, env_path, "--dry-run"]) == EXIT_USAGE_ERROR
+    assert "--dry-run only makes sense together with --fix" in capsys.readouterr().err
