@@ -28,6 +28,7 @@ $ echo $?
 - [Project structure](#project-structure)
 - [How it works](#how-it-works)
 - [Testing](#testing)
+- [Changelog and versioning](#changelog-and-versioning)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -424,6 +425,7 @@ See [docs/how-it-works.md](docs/how-it-works.md) for the parsing rules.
 
 ```text
 env-diff/
+├── CHANGELOG.md            # user-visible changes per release, plus Unreleased
 ├── LICENSE
 ├── README.md
 ├── pyproject.toml          # package metadata and the env-diff console script
@@ -431,7 +433,7 @@ env-diff/
 │   ├── how-it-works.md     # parser and comparison design notes
 │   └── options.md          # every CLI option and exit code in detail
 ├── src/env_diff/
-│   ├── __init__.py         # __version__
+│   ├── __init__.py         # __version__ (must match pyproject.toml)
 │   ├── __main__.py         # python -m env_diff
 │   ├── cli.py              # argument parsing, report formatting, exit codes
 │   ├── compare.py          # EnvComparison and compare_env_mappings
@@ -443,7 +445,8 @@ env-diff/
     ├── test_compare.py
     ├── test_fixer.py
     ├── test_ignore_file.py
-    └── test_parser.py
+    ├── test_parser.py
+    └── test_version.py     # __version__, pyproject, and CHANGELOG agree
 ```
 
 ## How it works
@@ -483,10 +486,35 @@ python3 -m venv /tmp/env-diff-venv
 /tmp/env-diff-venv/bin/pytest -q
 ```
 
-The suite covers the parser (quoting, comments, `export`, duplicates, BOM,
-multi-line double-quoted values and their line numbers, errors), the comparison rules, the `--fix` appender (quoting round trips, missing
-files, missing final newlines, and that the `--dry-run` preview matches what is written), and the CLI end to end through `main()` with
-temporary files.
+The suite (109 tests, under a second) is plain pytest with no fixtures beyond
+`tmp_path` and `capsys`, and it never touches a real `.env`:
+
+| Module | What it covers |
+| --- | --- |
+| `test_parser.py` | Quoting, inline comments, `export`, duplicates and their line numbers, BOM, optional markers, multi-line double-quoted values, malformed lines. |
+| `test_compare.py` | Missing/empty/extra buckets, order preservation, case sensitivity, ignored and optional keys, `--strict` semantics. |
+| `test_fixer.py` | Placeholder quoting round trips (including multi-line values), creating missing files, files without a final newline, and that the `--dry-run` preview matches what is written. |
+| `test_ignore_file.py` | One key per line, comments and blank lines, trailing comments and duplicates, empty files, a UTF-8 BOM, and a missing file raising. |
+| `test_cli.py` | `main()` end to end with temporary files: text and JSON reports, exit codes, `--check`, `--strict`, `--fix`, `--dry-run`, `--quiet`, `--no-warnings`, and usage errors. |
+| `test_version.py` | `__version__` equals the `pyproject.toml` version, the CHANGELOG has a dated heading for it below **Unreleased**, and `--version` prints it. |
+
+Run a single module or test while iterating, for example
+`pytest -q tests/test_parser.py -k multiline`.
+
+## Changelog and versioning
+
+User-visible changes are listed in [CHANGELOG.md](CHANGELOG.md) in the
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. The current
+release is **0.2.0** (2026-11-25), which added `--strict`, `--ignore-file`,
+duplicate-key warnings, `--quiet`, `--no-warnings`, optional-key markers,
+`--fix`, `--dry-run`, and multi-line values on top of 0.1.0.
+
+- Every pull request that changes behavior adds a line under **Unreleased**.
+- A release renames that heading to `## X.Y.Z - YYYY-MM-DD` and bumps both
+  `pyproject.toml` and `src/env_diff/__init__.py`; `tests/test_version.py`
+  fails if any of the three disagree.
+- While the version is `0.x`, new flags arrive in minor releases, but existing
+  flags, exit codes, and JSON field names are treated as stable.
 
 ## Roadmap
 
@@ -495,9 +523,9 @@ temporary files.
 ## Contributing
 
 Issues and pull requests are welcome. Keep changes small and focused, add a
-test for every behavior change, and update this README and `docs/` in the same
-pull request so the documentation never drifts from the code. Run
-`pytest -q` before opening a PR.
+test for every behavior change, and update this README, `docs/`, and the
+**Unreleased** section of `CHANGELOG.md` in the same pull request so the
+documentation never drifts from the code. Run `pytest -q` before opening a PR.
 
 ## License
 
