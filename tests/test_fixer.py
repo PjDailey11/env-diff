@@ -65,3 +65,10 @@ def test_render_fix_block_matches_what_append_writes(tmp_path):
 
 def test_render_fix_block_is_empty_without_lines():
     assert render_fix_block([]) == ""
+
+
+def test_multiline_placeholder_round_trips_through_double_quotes():
+    example_entries = _mapping('CERT="a\nb"\n')
+    lines = build_missing_key_lines(["CERT"], example_entries)
+    assert lines == ['CERT="a\nb"']
+    assert parse_env_text("\n".join(lines) + "\n")[0].value == "a\nb"

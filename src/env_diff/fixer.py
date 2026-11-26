@@ -32,6 +32,8 @@ def _format_placeholder(placeholder: str) -> str:
         or " " in placeholder
         or "\t" in placeholder
         or "#" in placeholder
+        # A newline only survives inside double quotes (multi-line values).
+        or "\n" in placeholder
         or placeholder.startswith(('"', "'"))
     )
     if not needs_quotes:

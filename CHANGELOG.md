@@ -28,6 +28,9 @@ Every pull request that changes behavior should add a line under
   placeholder values, creating the file if needed (#13, #16).
 - `--dry-run`: with `--fix`, print the block that would be appended instead
   of writing it (#17).
+- Multi-line double-quoted values (PEM keys, certificates) are parsed as one
+  entry that keeps the line number of its `KEY=` line; `--fix` re-quotes
+  multi-line placeholders so they parse back unchanged (#18).
 
 ### Fixed
 

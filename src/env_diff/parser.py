@@ -1,7 +1,8 @@
 """Parse dotenv-style files into ordered key/value entries.
 
 The parser deliberately understands only the common subset of the dotenv
-format (``KEY=value``, optional ``export`` prefix, quotes, ``#`` comments).
+format (``KEY=value``, optional ``export`` prefix, quotes, ``#`` comments,
+and double-quoted values spanning several lines).
 It never expands ``${VAR}`` references or runs anything: env-diff only needs
 to know which keys exist and whether their values are empty.
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 # Shell-style variable names. Dotenv files in the wild sometimes use dots or
 # dashes (e.g. Spring's ``server.port``), so those are accepted too rather than
@@ -79,7 +80,9 @@ def _strip_value(raw_value: str) -> str:
         if closing_index != -1:
             return stripped[1:closing_index]
         # Unterminated quote: keep the text after the opening quote instead of
-        # failing, since multi-line values are out of scope for this tool.
+        # failing. Multi-line double-quoted values were already joined by
+        # parse_env_text, so this only happens for an unclosed single quote
+        # or a double quote that runs to the end of the file.
         return stripped[1:]
     comment_index = stripped.find(" #")
     if comment_index != -1:
@@ -112,6 +115,43 @@ def _trailing_comment(raw_value: str) -> str:
     return stripped[comment_index + 2:].strip() if comment_index != -1 else ""
 
 
+def _opens_multiline_value(raw_value: str) -> bool:
+    """Return True if ``raw_value`` starts a double-quoted value left open.
+
+    Only double quotes may span lines, following python-dotenv and docker
+    compose, where multi-line values are almost always PEM keys or
+    certificates written as ``KEY="-----BEGIN ...``. Single-quoted values stay
+    single-line so a stray apostrophe (``NAME='O``) cannot swallow the rest of
+    the file.
+    """
+    stripped = raw_value.strip()
+    return stripped.startswith('"') and stripped.find('"', 1) == -1
+
+
+def _join_multiline_value(first_raw_value: str, following_lines: List[str]) -> Tuple[str, int]:
+    """Collect a multi-line double-quoted value.
+
+    Args:
+        first_raw_value: The text after ``=`` on the line that opened the
+            quote (it contains the opening ``"`` but no closing one).
+        following_lines: The lines after that one, in order.
+
+    Returns:
+        ``(raw_value, consumed_line_count)``: ``raw_value`` is the whole quoted
+        value joined with ``\n`` (plus anything after the closing quote, such
+        as an inline comment), shaped so :func:`_strip_value` and
+        :func:`_trailing_comment` treat it like a single-line value. If the
+        quote is never closed, every remaining line is consumed, matching the
+        lenient single-line rule that an unterminated quote keeps the rest.
+    """
+    collected_parts = [first_raw_value.rstrip("\r")]
+    for consumed_count, line_text in enumerate(following_lines, start=1):
+        collected_parts.append(line_text)
+        if '"' in line_text:
+            return "\n".join(collected_parts), consumed_count
+    return "\n".join(collected_parts), len(following_lines)
+
+
 def parse_env_text(env_text: str) -> List[EnvEntry]:
     """Parse dotenv-formatted text into a list of entries in file order.
 
@@ -127,7 +167,14 @@ def parse_env_text(env_text: str) -> List[EnvEntry]:
             invalid key name.
     """
     parsed_entries: List[EnvEntry] = []
-    for line_number, line_text in enumerate(env_text.splitlines(), start=1):
+    all_lines = env_text.splitlines()
+    line_index = 0
+    # A while loop instead of enumerate() because a multi-line value consumes
+    # several physical lines at once.
+    while line_index < len(all_lines):
+        line_text = all_lines[line_index]
+        line_number = line_index + 1
+        line_index += 1
         content = line_text.strip()
         if not content or content.startswith("#"):
             continue
@@ -139,6 +186,13 @@ def parse_env_text(env_text: str) -> List[EnvEntry]:
         key = raw_key.strip()
         if not _KEY_PATTERN.match(key):
             raise EnvParseError(line_number, line_text, f"invalid key name {key!r}")
+        if _opens_multiline_value(raw_value):
+            # The entry keeps the line number where it starts, which is where
+            # people look for the key.
+            raw_value, consumed_line_count = _join_multiline_value(
+                raw_value, all_lines[line_index:]
+            )
+            line_index += consumed_line_count
         is_optional = bool(_OPTIONAL_MARKER_PATTERN.search(_trailing_comment(raw_value)))
         parsed_entries.append(
             EnvEntry(key, _strip_value(raw_value), line_number, optional=is_optional)

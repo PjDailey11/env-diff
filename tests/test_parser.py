@@ -3,6 +3,7 @@
 import pytest
 
 from env_diff.parser import (
+    EnvEntry,
     EnvParseError,
     entries_to_mapping,
     find_duplicate_keys,
@@ -139,3 +140,32 @@ def test_space_then_hash_after_equals_is_an_empty_value():
     (commented, color) = parse_env_text("SECRET_KEY= # fill me in\nCOLOR=#fff\n")
     assert commented.value == ""
     assert color.value == "#fff"
+
+
+def test_multiline_double_quoted_value_is_joined():
+    entries = parse_env_text('KEY="-----BEGIN KEY-----\nabc\n-----END KEY-----"\nNEXT=1\n')
+    assert entries[0] == EnvEntry("KEY", "-----BEGIN KEY-----\nabc\n-----END KEY-----", 1)
+    # The line after the closing quote is parsed normally with its real number.
+    assert entries[1] == EnvEntry("NEXT", "1", 4)
+
+
+def test_multiline_value_keeps_comment_after_closing_quote():
+    entries = parse_env_text('CERT="a\nb" # env-diff: optional\n')
+    assert entries[0].value == "a\nb"
+    assert entries[0].optional is True
+
+
+def test_multiline_value_with_hash_inside_quotes_is_not_a_comment():
+    entries = parse_env_text('KEY="line one\n# not a comment\nend"\n')
+    assert entries[0].value == "line one\n# not a comment\nend"
+
+
+def test_unterminated_double_quote_keeps_rest_of_file():
+    entries = parse_env_text('KEY="open\nOTHER=1\n')
+    assert [entry.key for entry in entries] == ["KEY"]
+    assert entries[0].value == "open\nOTHER=1"
+
+
+def test_single_quoted_value_does_not_span_lines():
+    entries = parse_env_text("NAME='O\nNEXT=1\n")
+    assert [entry.key for entry in entries] == ["NAME", "NEXT"]
