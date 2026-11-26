@@ -166,6 +166,16 @@ duplicate-key warnings on stderr. The exit code is unchanged, so
 - `--format` is accepted alongside `--quiet` and simply has no visible
   effect, so scripts can add or drop `-q` without editing anything else.
 
+### `--no-warnings`
+
+Hides the duplicate-key warnings on stderr and nothing else: the text or JSON
+report is printed as usual and the exit code is unchanged. Use it when a file
+has intentional duplicates (for example a generated `.env` that appends local
+overrides at the end) and the warnings are noise in CI logs.
+
+- Usage errors (exit `2`) are still printed, exactly as with `--quiet`.
+- `--quiet` already implies it; passing both is allowed.
+
 ### `--version`
 
 Prints `env-diff <version>` and exits `0`.
@@ -193,7 +203,8 @@ env-diff: warning: .env: SECRET_KEY is set 2 times (lines 2, 7); the last value 
 
 Warnings are informational: they do not affect the exit code (with or without
 `--check` / `--strict`) and never appear on stdout, so `--format json` output
-stays valid. `--quiet` suppresses them.
+stays valid. `--no-warnings` suppresses only them; `--quiet` suppresses them
+along with the report.
 
 ## Text output format
 

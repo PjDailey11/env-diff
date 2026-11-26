@@ -96,6 +96,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="print no report and no warnings; only the exit code (errors are still shown)",
     )
     argument_parser.add_argument(
+        "--no-warnings",
+        action="store_true",
+        help="hide duplicate-key warnings on stderr but still print the report",
+    )
+    argument_parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
@@ -315,7 +320,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     # suspicious but the file still loads the same way a shell would read it.
     # --quiet silences them too, but the usage errors above are deliberately
     # printed before this point so a broken setup is never hidden.
-    if not arguments.quiet:
+    # --no-warnings is the narrower switch for files with known, intentional
+    # duplicates (e.g. a generated .env that appends overrides): it drops only
+    # these lines and keeps the report, unlike --quiet which drops everything.
+    if not (arguments.quiet or arguments.no_warnings):
         for checked_path, entry_list in (
             (arguments.example_path, example_entry_list),
             (arguments.env_path, actual_entry_list),

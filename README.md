@@ -74,6 +74,8 @@ into an issue or a CI log.
   writing or creating anything, so you can review it first.
 - `--quiet` / `-q` prints nothing (no report, no warnings) for hooks and CI
   steps that only need the exit code; file and parse errors still show.
+- `--no-warnings` hides just the duplicate-key warnings and keeps the report,
+  for files with intentional duplicates.
 - `--format json` for scripts, CI annotations, and editor integrations.
 - Never prints values, only key names (in both text and JSON output).
 - Zero runtime dependencies; Python 3.9+.
@@ -324,7 +326,8 @@ Empty (1):
 ```
 
 Warnings never change the exit code and never go to stdout, so JSON output
-stays parseable.
+stays parseable. If the duplicates are intentional, `env-diff --no-warnings`
+prints the same report without the warning line.
 
 ### Example: a git pre-commit hook
 
@@ -358,6 +361,7 @@ Nothing is printed on stdout or stderr unless a file is missing or malformed
 | `--ignore KEY` | none | Skip `KEY` everywhere, including `--check`. Repeat for several keys. |
 | `--ignore-file PATH` | `./.env-diff-ignore` if present | Read keys to ignore from a file, one per line, `#` comments allowed. Combined with `--ignore`. A missing explicit file exits `2`. |
 | `-q`, `--quiet` | off | Print no report and no duplicate-key warnings; only the exit code. Errors (exit `2`) are still printed. |
+| `--no-warnings` | off | Hide only the duplicate-key warnings on stderr; the report and exit code are unchanged. Errors (exit `2`) are still printed. |
 | `--format {text,json}` | `text` | Report format. JSON contains `missing`, `empty`, `extra`, `optional`, `ok`, and both paths. |
 | `--version` | | Print the version and exit. |
 
@@ -486,7 +490,6 @@ temporary files.
 
 ## Roadmap
 
-- `--no-warnings` to silence duplicate-key warnings while keeping the report (#19).
 - Comparing several env files at once (for example `.env` and `.env.local`).
 
 ## Contributing

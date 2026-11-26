@@ -98,7 +98,8 @@ key). The CLI reads each file once with `read_env_entries`, prints one
 collapses the entries with `entries_to_mapping`. Warnings never include values
 and never change the exit code, because the file still loads exactly as a
 shell would read it; they exist to catch merge leftovers such as an empty
-`SECRET_KEY=` shadowing the real value.
+`SECRET_KEY=` shadowing the real value. `--no-warnings` (or `--quiet`) skips
+this printing step only; the duplicates are still collapsed the same way.
 
 ## Ignore files (`env_diff/ignore_file.py`)
 

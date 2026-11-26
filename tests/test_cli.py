@@ -180,6 +180,30 @@ def test_quiet_silences_duplicate_key_warnings(tmp_path, capsys):
     assert capsys.readouterr().err == ""
 
 
+def test_no_warnings_hides_duplicates_but_keeps_report(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nB=\n", "A=1\nA=2\n")
+    assert main([example_path, env_path, "--no-warnings"]) == EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "Missing (1):\n  - B" in captured.out
+
+
+def test_no_warnings_keeps_check_exit_code_and_json(tmp_path, capsys):
+    example_path, env_path = _write_pair(tmp_path, "A=\nB=\n", "A=1\nA=\nB=\n")
+    exit_code = main([example_path, env_path, "--check", "--no-warnings", "--format", "json"])
+    assert exit_code == EXIT_PROBLEMS_FOUND
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert json.loads(captured.out)["empty"] == ["A", "B"]
+
+
+def test_no_warnings_still_reports_usage_errors(tmp_path, capsys):
+    example_path, _ = _write_pair(tmp_path, "A=\n", "A=1\n")
+    missing_path = str(tmp_path / "missing.env")
+    assert main([example_path, missing_path, "--no-warnings"]) == EXIT_USAGE_ERROR
+    assert "file not found" in capsys.readouterr().err
+
+
 def test_quiet_still_reports_usage_errors(tmp_path, capsys):
     missing_path = str(tmp_path / "missing.env")
     example_path, _ = _write_pair(tmp_path, "A=\n", "A=1\n")
