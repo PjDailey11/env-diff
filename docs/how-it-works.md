@@ -22,8 +22,15 @@ parser.py  ->  compare.py  ->  cli.py
 5. Clean the value:
    - If it starts with `'` or `"`, take everything up to the matching closing
      quote. `#` inside quotes is kept (`PASSWORD="abc#123"`).
-   - If the quote is never closed, keep the rest of the line rather than
-     erroring; multi-line values are out of scope.
+   - If a **double** quote is not closed on its line, the value continues on
+     the following lines until a line containing `"` (`_opens_multiline_value`
+     and `_join_multiline_value`). The pieces are joined with `\n`, the entry
+     keeps the line number of the `KEY=` line, and parsing resumes after the
+     closing line. Single quotes never span lines, so an apostrophe typo
+     cannot swallow the rest of the file.
+   - If a quote is never closed at all (a single quote on its line, or a
+     double quote that runs to the end of the file), keep the rest of the
+     text rather than erroring.
    - Otherwise, cut at ` #` (space, hash) to drop an inline comment. A hash
      with no space before it (`COLOR=#fff`) is part of the value. This matches
      python-dotenv and docker compose.
@@ -51,7 +58,9 @@ marked.
 
 - No `${VAR}` interpolation and no command substitution. env-diff must never
   execute or resolve anything from a secrets file.
-- No multi-line values.
+- No backslash escapes inside double quotes (`\n` stays a backslash and an
+  `n`); a real newline is only produced by an actual line break.
+- No multi-line single-quoted or unquoted values.
 
 ## Comparing (`env_diff/compare.py`)
 
@@ -106,7 +115,8 @@ exists.
 `build_missing_key_lines(missing_keys, example_entries)` produces
 `KEY=placeholder` lines in template order. `_format_placeholder` quotes a value
 when the parser would otherwise change it (surrounding whitespace, `#`, a
-leading quote), preferring double quotes and falling back to single quotes
+leading quote, or an embedded newline from a multi-line template value, which
+only survives inside double quotes), preferring double quotes and falling back to single quotes
 when the value contains `"`. `append_missing_keys(path, lines)` opens the file
 in append mode, adds a blank line and a header comment, and creates the file
 if needed; it writes nothing when there is nothing to add.

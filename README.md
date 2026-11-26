@@ -57,7 +57,8 @@ into an issue or a CI log.
 - `--strict` makes extra keys fail `--check` too, for production and CI files
   where an undocumented key means the template is stale.
 - Understands the common dotenv syntax: comments, `export` prefixes, single
-  and double quotes, inline `# comments`, values containing `=`.
+  and double quotes, inline `# comments`, values containing `=`, and
+  double-quoted values that span several lines (PEM keys, certificates).
 - Clear errors with line numbers for malformed lines.
 - Warns on stderr when a key is assigned more than once in either file (the
   last value silently wins, which can hide a real secret behind `KEY=`).
@@ -386,9 +387,30 @@ More detail: [docs/options.md](docs/options.md).
 | `KEY= # env-diff: optional` | `KEY` | empty string, and the key is marked optional |
 | `# comment` / blank line | skipped | |
 | `server.port=80` | `server.port` | `80` (dots and dashes allowed in keys) |
+| `KEY="line one` + newline + `line two"` | `KEY` | `line one\nline two` (only double quotes may span lines) |
 
 If a key appears twice, the last value wins (the same as a shell reading the
-file top to bottom), and env-diff prints a warning naming every line. Not supported on purpose: multi-line values, `${VAR}`
+file top to bottom), and env-diff prints a warning naming every line.
+
+A double-quoted value may continue over several lines until the next `"`;
+the entry keeps the line number where it starts, so warnings and errors point
+at the key. This is how PEM keys and certificates are usually stored:
+
+```dotenv
+TLS_KEY="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASC...
+-----END PRIVATE KEY-----"
+NEXT_KEY=value
+```
+
+Single-quoted values stay on one line on purpose, so a stray apostrophe
+(`NAME='O`) cannot swallow the rest of the file. A double quote that is never
+closed consumes the remaining lines (the same lenient rule as an unterminated
+quote on one line). When `--fix` copies a multi-line placeholder from the
+template, it writes it double-quoted so the result parses back to the same
+value.
+
+Not supported on purpose: `${VAR}`
 expansion, and command substitution. env-diff only needs key names and
 emptiness, and it should never execute anything from your env file.
 
@@ -458,13 +480,14 @@ python3 -m venv /tmp/env-diff-venv
 ```
 
 The suite covers the parser (quoting, comments, `export`, duplicates, BOM,
-errors), the comparison rules, the `--fix` appender (quoting round trips, missing
+multi-line double-quoted values and their line numbers, errors), the comparison rules, the `--fix` appender (quoting round trips, missing
 files, missing final newlines, and that the `--dry-run` preview matches what is written), and the CLI end to end through `main()` with
 temporary files.
 
 ## Roadmap
 
-- Multi-line quoted values.
+- `--no-warnings` to silence duplicate-key warnings while keeping the report (#19).
+- Comparing several env files at once (for example `.env` and `.env.local`).
 
 ## Contributing
 
