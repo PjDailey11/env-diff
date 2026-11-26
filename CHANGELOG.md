@@ -31,6 +31,8 @@ Every pull request that changes behavior should add a line under
 - Multi-line double-quoted values (PEM keys, certificates) are parsed as one
   entry that keeps the line number of its `KEY=` line; `--fix` re-quotes
   multi-line placeholders so they parse back unchanged (#18).
+- `--no-warnings`: hide duplicate-key warnings but keep the report and exit
+  code, unlike `--quiet` which hides everything (#19).
 
 ### Fixed
 
