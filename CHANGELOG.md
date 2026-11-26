@@ -11,6 +11,10 @@ Every pull request that changes behavior should add a line under
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.0 - 2026-11-25
+
 ### Added
 
 - `--strict`: with `--check`, keys in `.env` that the template does not list
